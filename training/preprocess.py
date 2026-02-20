@@ -1,6 +1,11 @@
 import pandas as pd
 from pathlib import Path
 from typing import List
+import sys
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from shared.feature_engine import MarketFeatureEngine
 
 class Preprocessor:
