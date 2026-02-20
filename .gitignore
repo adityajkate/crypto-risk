@@ -21,6 +21,9 @@ htmlcov/
 *.swp
 *.swo
 
+# Environment variables
+.env
+
 # Data directories
 training/data/raw/*.csv
 training/data/processed/*.csv

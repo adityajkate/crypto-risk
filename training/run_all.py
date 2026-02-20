@@ -20,16 +20,14 @@ SCRIPTS = [
     ("PCA", "training/run_pca.py"),
 ]
 
+
 def run_step(name: str, script: str) -> bool:
     """Run a training step."""
     print(f"\n{'='*60}")
     print(f"Running: {name}")
     print(f"{'='*60}")
 
-    result = subprocess.run(
-        [sys.executable, script],
-        cwd=Path(__file__).parent.parent
-    )
+    result = subprocess.run([sys.executable, script], cwd=Path(__file__).parent.parent)
 
     if result.returncode != 0:
         print(f"ERROR: {name} failed with code {result.returncode}")
@@ -37,6 +35,7 @@ def run_step(name: str, script: str) -> bool:
 
     print(f"✓ {name} completed successfully")
     return True
+
 
 def main():
     """Run complete training pipeline."""
@@ -56,6 +55,7 @@ def main():
     artifacts_dir = Path(__file__).parent.parent / "artifacts"
     for artifact in sorted(artifacts_dir.glob("*.joblib")):
         print(f"  - {artifact.name}")
+
 
 if __name__ == "__main__":
     main()
