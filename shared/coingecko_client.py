@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 class CoinGeckoClient:
     BASE_URL = "https://api.coingecko.com/api/v3"
-    RATE_LIMIT_DELAY = 1.5  # 40 req/min max
+    RATE_LIMIT_DELAY = 3.0  # Conservative: 20 req/min to avoid rate limits
 
     def __init__(self):
         self.client = httpx.AsyncClient(timeout=30.0)
@@ -38,8 +38,9 @@ class CoinGeckoClient:
         )
         return [{"id": c["id"], "symbol": c["symbol"], "name": c["name"]} for c in data]
 
-    async def fetch_coin_history(self, coin_id: str, days: str = "max") -> pd.DataFrame:
-        """Fetch OHLCV history for a coin."""
+    async def fetch_coin_history(self, coin_id: str, days: str = "365") -> pd.DataFrame:
+        """Fetch OHLCV history for a coin. Uses 365 days (free tier limit)."""
+        # CoinGecko free tier only allows up to 365 days without auth
         data = await self._rate_limited_request(
             f"coins/{coin_id}/market_chart",
             params={"vs_currency": "usd", "days": days}
