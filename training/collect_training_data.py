@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.coingecko_client import CoinGeckoClient
 
 class TrainingDataCollector:
-    def __init__(self, output_dir: Path = None, coin_limit: int = 10):
+    def __init__(self, output_dir: Path = None, coin_limit: int = 50):
         self.output_dir = output_dir or Path(__file__).parent / "data" / "raw"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.coin_limit = coin_limit

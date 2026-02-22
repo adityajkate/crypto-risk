@@ -17,28 +17,48 @@ class CoinGeckoRealtimeClient:
         self.rate_limit_delay = rate_limit_delay
         self._last_request_time = 0
 
-        # Use Pro API if key is provided
-        self.base_url = self.PRO_BASE_URL if api_key else self.BASE_URL
+        # Check if it's a Demo key (starts with CG-) or Pro key
+        # Demo keys use regular API endpoint with x-cg-demo-api-key header
+        is_demo_key = api_key and api_key.startswith("CG-")
 
-        headers = {}
-        if api_key:
-            headers["x-cg-pro-api-key"] = api_key
+        if is_demo_key:
+            self.base_url = self.BASE_URL
+            headers = {"x-cg-demo-api-key": api_key}
+        elif api_key:
+            self.base_url = self.PRO_BASE_URL
+            headers = {"x-cg-pro-api-key": api_key}
+        else:
+            self.base_url = self.BASE_URL
+            headers = {}
 
         self.client = httpx.AsyncClient(timeout=30.0, headers=headers)
 
-    async def _rate_limited_request(self, endpoint: str, params: dict = None) -> dict:
-        """Make rate-limited request to CoinGecko API."""
+    async def _rate_limited_request(self, endpoint: str, params: dict = None, max_retries: int = 3) -> dict:
+        """Make rate-limited request to CoinGecko API with exponential backoff retry."""
         import time
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self.rate_limit_delay:
-            await asyncio.sleep(self.rate_limit_delay - elapsed)
 
-        url = f"{self.base_url}/{endpoint}"
-        response = await self.client.get(url, params=params)
-        self._last_request_time = time.time()
+        for attempt in range(max_retries):
+            try:
+                elapsed = time.time() - self._last_request_time
+                if elapsed < self.rate_limit_delay:
+                    await asyncio.sleep(self.rate_limit_delay - elapsed)
 
-        response.raise_for_status()
-        return response.json()
+                url = f"{self.base_url}/{endpoint}"
+                response = await self.client.get(url, params=params)
+                self._last_request_time = time.time()
+
+                response.raise_for_status()
+                return response.json()
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:  # Rate limit error
+                    if attempt < max_retries - 1:
+                        # Exponential backoff: 2^attempt seconds
+                        backoff_time = 2 ** attempt
+                        print(f"Rate limit hit, retrying in {backoff_time}s (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(backoff_time)
+                        continue
+                raise  # Re-raise if not 429 or max retries exceeded
 
     async def get_coin_price(self, coin_id: str) -> Dict[str, Any]:
         """Get current price and market data for a coin."""

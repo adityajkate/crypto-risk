@@ -54,7 +54,7 @@ async def startup_event():
     # Initialize risk predictor
     risk_predictor = RiskPredictor(artifacts_dir=settings.artifacts_dir)
 
-    print("✓ API initialized successfully")
+    print("API initialized successfully")
 
 
 @app.on_event("shutdown")

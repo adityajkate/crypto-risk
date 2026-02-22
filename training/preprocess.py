@@ -8,10 +8,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.feature_engine import MarketFeatureEngine
 
+
 class Preprocessor:
     def __init__(self, raw_dir: Path = None, processed_dir: Path = None):
         self.raw_dir = raw_dir or Path(__file__).parent / "data" / "raw"
-        self.processed_dir = processed_dir or Path(__file__).parent / "data" / "processed"
+        self.processed_dir = (
+            processed_dir or Path(__file__).parent / "data" / "processed"
+        )
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.feature_engine = MarketFeatureEngine()
 
@@ -49,7 +52,7 @@ class Preprocessor:
             # Convert to OHLCV (approximate from single price)
             df["open"] = df["price"].shift(1).fillna(df["price"])
             df["high"] = df["price"] * 1.01  # Approximate
-            df["low"] = df["price"] * 0.99   # Approximate
+            df["low"] = df["price"] * 0.99  # Approximate
             df["close"] = df["price"]
             df["volume"] = df.get("volume", 0)
 
@@ -58,9 +61,11 @@ class Preprocessor:
             print(f"Error loading {file_path}: {e}")
             return None
 
+
 def main():
     preprocessor = Preprocessor()
     preprocessor.run()
+
 
 if __name__ == "__main__":
     main()

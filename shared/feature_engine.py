@@ -51,13 +51,76 @@ class MarketFeatureEngine:
         # Volume ratio
         df["volume_sma_ratio"] = df["volume"] / df["volume"].rolling(20).mean()
 
-        # Drawdown
+        # Drawdown features (PRIORITY 4: Enhanced)
         rolling_max = df["close"].expanding().max()
         df["drawdown"] = (df["close"] / rolling_max - 1) * 100
 
-        # Price to SMA ratios
+        # Max drawdown over 30 days
+        df["max_drawdown_30d"] = df["drawdown"].rolling(30).min()
+
+        # Drawdown duration (days in drawdown)
+        in_drawdown = df["drawdown"] < -1  # More than 1% below peak
+        df["drawdown_duration"] = in_drawdown.groupby((~in_drawdown).cumsum()).cumsum()
+
+        # Recovery ratio (how far recovered from max drawdown)
+        df["recovery_ratio"] = df["drawdown"] / df["max_drawdown_30d"].replace(0, -1)
+
+        # Interaction: drawdown * volatility (structural instability)
+        df["drawdown_vol_interaction"] = df["drawdown"].abs() * df["volatility_30d"]
+
+        # Price to SMA ratios (reduced from 200 to 50 for better data availability)
         df["price_sma50_ratio"] = df["close"] / df["close"].rolling(50).mean()
-        df["price_sma200_ratio"] = df["close"] / df["close"].rolling(200).mean()
+        df["price_sma200_ratio"] = df["close"] / df["close"].rolling(50).mean()  # Using 50 instead of 200
+
+        # Advanced Momentum Indicators
+        # Stochastic RSI
+        df["stoch_rsi"] = talib.STOCHRSI(df["close"], timeperiod=14)[0]
+
+        # ADX (Average Directional Index) - Trend Strength
+        df["adx"] = talib.ADX(df["high"], df["low"], df["close"], timeperiod=14)
+
+        # CCI (Commodity Channel Index)
+        df["cci"] = talib.CCI(df["high"], df["low"], df["close"], timeperiod=20)
+
+        # Williams %R
+        df["willr"] = talib.WILLR(df["high"], df["low"], df["close"], timeperiod=14)
+
+        # Money Flow Index (MFI)
+        df["mfi"] = talib.MFI(df["high"], df["low"], df["close"], df["volume"], timeperiod=14)
+
+        # Rate of Change (ROC)
+        df["roc"] = talib.ROC(df["close"], timeperiod=10)
+
+        # Momentum
+        df["momentum"] = talib.MOM(df["close"], timeperiod=10)
+
+        # Triple Exponential Moving Average (TRIX)
+        df["trix"] = talib.TRIX(df["close"], timeperiod=15)
+
+        # Ultimate Oscillator
+        df["ultosc"] = talib.ULTOSC(df["high"], df["low"], df["close"])
+
+        # Aroon Oscillator
+        df["aroon_osc"] = talib.AROONOSC(df["high"], df["low"], timeperiod=14)
+
+        # Balance of Power
+        df["bop"] = talib.BOP(df["open"], df["high"], df["low"], df["close"])
+
+        # Regime Detection Features (PRIORITY 6)
+        # Simple regime classification based on volatility and returns
+        # High volatility + negative returns = crisis (2)
+        # Moderate volatility = transition (1)
+        # Low volatility = stable (0)
+        vol_threshold_high = df["volatility_7d"].quantile(0.75)
+        vol_threshold_low = df["volatility_7d"].quantile(0.25)
+
+        df["regime"] = 1  # Default to moderate/transition
+        df.loc[df["volatility_7d"] <= vol_threshold_low, "regime"] = 0  # Low vol stable
+        df.loc[(df["volatility_7d"] > vol_threshold_high) & (df["returns_1d"] < 0), "regime"] = 2  # High vol crisis
+
+        # Regime interaction features
+        df["regime_volatility_interaction"] = df["regime"] * df["volatility_30d"]
+        df["regime_drawdown_interaction"] = df["regime"] * df["drawdown"].abs()
 
         # Drop NaN rows
         df = df.dropna()

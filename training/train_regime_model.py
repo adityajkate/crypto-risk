@@ -48,32 +48,47 @@ class RegimeModelTrainer:
         best_bic = float("inf")
         best_model = None
 
+        # Standardize data for numerical stability
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
         for n_states in [2, 3, 4]:
-            model = GaussianHMM(
-                n_components=n_states,
-                covariance_type="full",
-                random_state=42,
-                n_iter=100
-            )
-            model.fit(X)
+            try:
+                model = GaussianHMM(
+                    n_components=n_states,
+                    covariance_type="diag",  # Use diagonal instead of full for stability
+                    random_state=42,
+                    n_iter=100
+                )
+                model.fit(X_scaled)
 
-            # Calculate BIC
-            log_likelihood = model.score(X)
-            n_params = (n_states ** 2 - n_states) + 2 * n_states * X.shape[1] + n_states * X.shape[1] * (X.shape[1] + 1) / 2
-            n_obs = len(X)
-            bic = -2 * log_likelihood + n_params * np.log(n_obs)
+                # Calculate BIC
+                log_likelihood = model.score(X_scaled)
+                n_params = (n_states ** 2 - n_states) + 2 * n_states * X.shape[1]
+                n_obs = len(X_scaled)
+                bic = -2 * log_likelihood + n_params * np.log(n_obs)
 
-            print(f"  n_states={n_states}: logL={log_likelihood:.2f}, BIC={bic:.2f}")
+                print(f"  n_states={n_states}: logL={log_likelihood:.2f}, BIC={bic:.2f}")
 
-            if bic < best_bic:
-                best_bic = bic
-                best_n = n_states
-                best_model = model
+                if bic < best_bic:
+                    best_bic = bic
+                    best_n = n_states
+                    best_model = model
+            except Exception as e:
+                print(f"  n_states={n_states}: Failed - {e}")
+                continue
+
+        if best_model is None:
+            print("  Warning: All HMM models failed, using 2-state fallback")
+            best_model = GaussianHMM(n_components=2, covariance_type="diag", random_state=42, n_iter=100)
+            best_model.fit(X_scaled)
+            best_n = 2
 
         print(f"  Selected: {best_n} states (lowest BIC)")
 
         # Name regimes by volatility
-        hidden_states = best_model.predict(X)
+        hidden_states = best_model.predict(X_scaled)
         state_profiles = pd.DataFrame({
             "state": hidden_states,
             "volatility": df["volatility_7d"].values,

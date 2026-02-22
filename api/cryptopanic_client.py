@@ -8,7 +8,7 @@ from datetime import datetime
 class CryptoPanicClient:
     """CryptoPanic API client for crypto news and sentiment."""
 
-    BASE_URL = "https://cryptopanic.com/api/v1"
+    BASE_URL = "https://cryptopanic.com/api/developer/v2"
 
     def __init__(self, api_key: str, rate_limit_delay: float = 1.0):
         self.api_key = api_key
@@ -27,7 +27,8 @@ class CryptoPanicClient:
             params = {}
         params["auth_token"] = self.api_key
 
-        url = f"{self.BASE_URL}/{endpoint}"
+        # Add trailing slash to endpoint
+        url = f"{self.BASE_URL}/{endpoint}/"
         response = await self.client.get(url, params=params)
         self._last_request_time = time.time()
 
@@ -51,6 +52,7 @@ class CryptoPanicClient:
             limit: Number of posts to return (max 100)
         """
         params = {
+            "public": "true",
             "kind": kind,
             "filter": filter_type
         }
