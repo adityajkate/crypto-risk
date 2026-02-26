@@ -1,6 +1,9 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pandas as pd
 import numpy as np
-from pathlib import Path
 import joblib
 import json
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
@@ -19,29 +22,7 @@ import xgboost as xgb
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
-class EpsilonCalibratedClassifier:
-    """Wrapper to apply epsilon floor to calibrated probabilities."""
-
-    def __init__(self, calibrated_model, epsilon=1e-4):
-        self.calibrated_model = calibrated_model
-        self.epsilon = epsilon
-
-    def predict(self, X):
-        return self.calibrated_model.predict(X)
-
-    def predict_proba(self, X):
-        """Apply epsilon floor and re-normalize probabilities."""
-        proba = self.calibrated_model.predict_proba(X)
-        # Apply epsilon floor to prevent zero probabilities
-        proba = np.maximum(proba, self.epsilon)
-        # Re-normalize to sum to 1.0
-        proba = proba / proba.sum(axis=1, keepdims=True)
-        return proba
-
-    def __getattr__(self, name):
-        """Delegate other attributes to the wrapped model."""
-        return getattr(self.calibrated_model, name)
+from shared.models import EpsilonCalibratedClassifier
 
 
 class RiskClassifierTrainer:

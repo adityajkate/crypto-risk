@@ -1,0 +1,193 @@
+/* Fintech-Grade Color System */
+
+:root {
+  /* Primary Palette - Desaturated Teal */
+  --color-primary: #0f766e;        /* teal-700 - Main brand color */
+  --color-primary-light: #14b8a6;  /* teal-500 - Interactive elements */
+  --color-primary-dark: #115e59;   /* teal-800 - Hover states */
+
+  /* Background System */
+  --color-bg: #F8F9FA;             /* Off-white background */
+  --color-card: #FFFFFF;           /* Pure white cards */
+
+  /* Text Hierarchy */
+  --color-text-primary: #111827;   /* slate-900 - Headlines, values */
+  --color-text-secondary: #6B7280; /* slate-500 - Labels, descriptions */
+  --color-text-muted: #9CA3AF;     /* slate-400 - Disabled, tertiary */
+
+  /* Semantic Colors */
+  --color-success: #10b981;        /* emerald-500 - Positive changes */
+  --color-danger: #ef4444;         /* red-500 - Negative changes */
+  --color-warning: #f59e0b;        /* amber-500 - Caution, medium risk */
+
+  /* Borders & Dividers */
+  --color-border: #E5E7EB;         /* gray-200 - Subtle dividers */
+  --color-border-light: #F3F4F6;   /* gray-100 - Very subtle */
+
+  /* Shadows */
+  --shadow-sm: 0 4px 24px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.09);
+}
+
+/* Typography Scale */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Component Patterns */
+
+/* Cards */
+.card {
+  background: var(--color-card);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Buttons - Primary */
+.btn-primary {
+  background: var(--color-primary-light);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: var(--color-primary);
+}
+
+/* Buttons - Secondary */
+.btn-secondary {
+  background: #f1f5f9;
+  color: var(--color-text-secondary);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
+}
+
+/* Stat Cards */
+.stat-card {
+  background: var(--color-card);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-label {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.stat-value {
+  color: var(--color-text-primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-change-positive {
+  color: var(--color-success);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-change-negative {
+  color: var(--color-danger);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Technical Indicators */
+.indicator-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
+
+.indicator-label {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.indicator-value {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Risk Levels */
+.risk-low {
+  color: var(--color-success);
+  background: #d1fae5;
+}
+
+.risk-medium {
+  color: var(--color-warning);
+  background: #fef3c7;
+}
+
+.risk-high {
+  color: var(--color-danger);
+  background: #fee2e2;
+}
+
+/* Chart Styles */
+.chart-container {
+  background: var(--color-card);
+  padding: 1.25rem;
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Tooltips */
+.tooltip {
+  background: #1e293b;
+  color: white;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Usage Examples */
+
+/*
+Primary Button:
+<button class="btn-primary">Analyze Risk</button>
+
+Stat Card:
+<div class="stat-card">
+  <div class="stat-label">Bitcoin Price</div>
+  <div class="stat-value">$94,234.56</div>
+  <div class="stat-change-positive">+2.34%</div>
+</div>
+
+Indicator Row:
+<div class="indicator-row">
+  <span class="indicator-label">RSI (14)</span>
+  <span class="indicator-value">67.42</span>
+</div>
+
+Risk Badge:
+<span class="risk-medium">Medium Risk</span>
+*/

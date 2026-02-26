@@ -1,15 +1,23 @@
 """Model inference service for risk predictions."""
+import sys
+import types as _types
 import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List
-import sys
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.feature_engine import MarketFeatureEngine
+from shared.models import EpsilonCalibratedClassifier
+
+# Register EpsilonCalibratedClassifier under every module path it could have
+# been pickled with, so joblib deserialization works regardless of origin.
+for _mod_name in ("__main__", "__mp_main__", "shared.models", "training.train_risk_classifier"):
+    if _mod_name not in sys.modules:
+        sys.modules[_mod_name] = _types.ModuleType(_mod_name)
+    setattr(sys.modules[_mod_name], "EpsilonCalibratedClassifier", EpsilonCalibratedClassifier)
 
 
 class RiskPredictor:
@@ -23,11 +31,13 @@ class RiskPredictor:
     def _load_models(self):
         """Load all trained models from artifacts directory."""
         try:
-            # Load risk classifier
             self.risk_scaler = joblib.load(self.artifacts_dir / "scaler.joblib")
-            self.risk_model = joblib.load(self.artifacts_dir / "risk_rf.joblib")  # Use Random Forest
+            raw_risk_model = joblib.load(self.artifacts_dir / "risk_rf.joblib")
+            if isinstance(raw_risk_model, EpsilonCalibratedClassifier):
+                self.risk_model = raw_risk_model
+            else:
+                self.risk_model = EpsilonCalibratedClassifier(raw_risk_model, epsilon=1e-4)
 
-            # Load Winsorization parameters
             try:
                 winsorization = joblib.load(self.artifacts_dir / "winsorization_params.joblib")
                 self.percentile_1 = pd.Series(winsorization["percentile_1"])
@@ -37,38 +47,28 @@ class RiskPredictor:
                 self.percentile_1 = None
                 self.percentile_99 = None
 
-            # Load volatility regression
             self.volatility_model = joblib.load(self.artifacts_dir / "volatility_linreg.joblib")
             self.volatility_qreg_10 = joblib.load(self.artifacts_dir / "volatility_qreg_10.joblib")
             self.volatility_qreg_50 = joblib.load(self.artifacts_dir / "volatility_qreg_50.joblib")
             self.volatility_qreg_90 = joblib.load(self.artifacts_dir / "volatility_qreg_90.joblib")
 
-            # Load clustering
             self.cluster_scaler = joblib.load(self.artifacts_dir / "cluster_scaler.joblib")
             self.kmeans_model = joblib.load(self.artifacts_dir / "kmeans_market.joblib")
 
-            # Load regime detection
             self.regime_hmm = joblib.load(self.artifacts_dir / "regime_hmm.joblib")
             self.regime_names = joblib.load(self.artifacts_dir / "regime_names.joblib")
 
-            # Load PCA
             self.pca_scaler = joblib.load(self.artifacts_dir / "pca_scaler.joblib")
             self.pca_model = joblib.load(self.artifacts_dir / "pca_transformer.joblib")
 
-            # Load feature lists
             self.risk_features = [
-                # Returns and Volatility
                 "returns_1d", "log_returns", "volatility_7d", "volatility_30d",
-                # Classic Indicators
                 "rsi_14", "macd", "macd_signal", "macd_hist",
                 "bb_width", "atr_14", "obv", "volume_sma_ratio",
                 "drawdown", "price_sma50_ratio", "price_sma200_ratio",
-                # Enhanced Drawdown Features
                 "max_drawdown_30d", "drawdown_duration", "recovery_ratio", "drawdown_vol_interaction",
-                # Advanced Momentum Indicators
                 "stoch_rsi", "adx", "cci", "willr", "mfi",
                 "roc", "momentum", "trix", "ultosc", "aroon_osc", "bop",
-                # Regime Features
                 "regime_volatility_interaction", "regime_drawdown_interaction"
             ]
 
@@ -84,36 +84,27 @@ class RiskPredictor:
             raise
 
     def prepare_ohlcv_data(self, price_history: List[Dict[str, Any]]) -> pd.DataFrame:
-        """
-        Convert price history to OHLCV DataFrame.
-
-        Args:
-            price_history: List of dicts with 'timestamp', 'open', 'high', 'low', 'close', 'volume'
-        """
+        """Convert price history to OHLCV DataFrame."""
         df = pd.DataFrame(price_history)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df = df.sort_values("timestamp").reset_index(drop=True)
         return df
 
     def predict_risk(self, ohlcv_data: pd.DataFrame) -> Dict[str, Any]:
-        """
-        Predict risk level for a coin based on OHLCV data.
+        """Predict risk level for a coin based on OHLCV data.
 
         Returns:
-            Dict with risk_level (0=low, 1=medium, 2=high), probability, and features
+            Dict with risk_level (0=low, 1=medium, 2=high), probability, and features.
         """
-        # Generate features
         features_df = self.feature_engine.transform(ohlcv_data)
 
         if len(features_df) == 0:
             return {"error": "Insufficient data for prediction"}
 
-        # Use most recent data point
         latest = features_df.iloc[-1]
         X = latest[self.risk_features].values.reshape(1, -1)
         X = np.nan_to_num(X, 0)
 
-        # Apply Winsorization if parameters are available
         if self.percentile_1 is not None and self.percentile_99 is not None:
             X_df = pd.DataFrame(X, columns=self.risk_features)
             for col in self.risk_features:
@@ -124,22 +115,15 @@ class RiskPredictor:
                     )
             X = X_df.values
 
-        # Scale and predict
         X_scaled = self.risk_scaler.transform(X)
         risk_level = int(self.risk_model.predict(X_scaled)[0])
         risk_proba = self.risk_model.predict_proba(X_scaled)[0]
 
         risk_labels = {0: "low", 1: "medium", 2: "high"}
-
-        # PRIORITY 2: Check confidence threshold
         max_confidence = float(risk_proba.max())
         confidence_margin = risk_proba[np.argsort(risk_proba)[-1]] - risk_proba[np.argsort(risk_proba)[-2]]
-        is_uncertain = max_confidence < 0.65 or confidence_margin < 0.10  # Add margin check
+        is_uncertain = max_confidence < 0.65 or confidence_margin < 0.10
 
-        # Strict taxonomy: risk_label must be "low", "medium", or "high" only
-        risk_label_output = risk_labels[risk_level]
-
-        # Warning message for uncertain predictions
         warning = None
         if is_uncertain:
             if confidence_margin < 0.10:
@@ -149,7 +133,7 @@ class RiskPredictor:
 
         return {
             "risk_level": risk_level,
-            "risk_label": risk_label_output,
+            "risk_label": risk_labels[risk_level],
             "probabilities": {
                 "low": float(risk_proba[0]),
                 "medium": float(risk_proba[1]),
@@ -175,8 +159,6 @@ class RiskPredictor:
             return {"error": "Insufficient data for prediction"}
 
         latest = features_df.iloc[-1]
-
-        # Prepare features for volatility prediction
         vol_features = [
             "volatility_7d", "volatility_30d", "rsi_14", "atr_14",
             "bb_width", "volume_sma_ratio", "drawdown", "price_sma50_ratio", "macd_hist"
@@ -184,11 +166,8 @@ class RiskPredictor:
         X = latest[vol_features].values.reshape(1, -1)
         X = np.nan_to_num(X, 0)
 
-        # Predict with linear regression
         predicted_vol = float(self.volatility_model.predict(X)[0])
 
-        # Get quantile predictions for confidence intervals
-        # Manually add constant column for quantile regression models
         X_const = np.column_stack([np.ones((X.shape[0], 1)), X])
         vol_10 = float(self.volatility_qreg_10.predict(X_const)[0])
         vol_50 = float(self.volatility_qreg_50.predict(X_const)[0])
@@ -216,7 +195,6 @@ class RiskPredictor:
         X = latest[self.cluster_features].values.reshape(1, -1)
         X = np.nan_to_num(X, 0)
 
-        # Scale and predict cluster
         X_scaled = self.cluster_scaler.transform(X)
         cluster = int(self.kmeans_model.predict(X_scaled)[0])
 
@@ -237,12 +215,10 @@ class RiskPredictor:
         if len(features_df) < 10:
             return {"error": "Insufficient data for regime detection (need at least 10 points)"}
 
-        # Use recent history for regime detection
         recent = features_df.tail(30)
         X = recent[["log_returns", "volatility_7d"]].values
         X = np.nan_to_num(X, 0)
 
-        # Predict regime
         regime_state = int(self.regime_hmm.predict(X)[-1])
         regime_name = self.regime_names.get(regime_state, "unknown")
 
@@ -263,12 +239,10 @@ class RiskPredictor:
 
     def get_comprehensive_analysis(self, ohlcv_data: pd.DataFrame) -> Dict[str, Any]:
         """Get complete risk analysis with probability-regime blending."""
-        # Get base predictions
         volatility_forecast = self.predict_volatility(ohlcv_data)
         market_cluster = self.predict_market_cluster(ohlcv_data)
         market_regime = self.predict_regime(ohlcv_data)
 
-        # Generate features for risk prediction
         features_df = self.feature_engine.transform(ohlcv_data)
         if len(features_df) == 0:
             return {"error": "Insufficient data for prediction"}
@@ -277,7 +251,6 @@ class RiskPredictor:
         X = latest[self.risk_features].values.reshape(1, -1)
         X = np.nan_to_num(X, 0)
 
-        # Apply Winsorization if parameters are available
         if self.percentile_1 is not None and self.percentile_99 is not None:
             X_df = pd.DataFrame(X, columns=self.risk_features)
             for col in self.risk_features:
@@ -288,50 +261,39 @@ class RiskPredictor:
                     )
             X = X_df.values
 
-        # Scale and get base probabilities
         X_scaled = self.risk_scaler.transform(X)
         risk_proba = self.risk_model.predict_proba(X_scaled)[0].copy()
 
-        # FIX #1: Probability-regime blending (replace deterministic overrides)
         regime_name = market_regime.get("regime_name", "unknown")
 
-        # Apply regime-based probability adjustments
         if regime_name == "high_vol_crisis":
-            # Penalize low risk probability in crisis regime
-            risk_proba[0] *= 0.2  # Low risk penalty factor
+            risk_proba[0] *= 0.2
         elif regime_name == "moderate_transition":
-            # Moderate penalty for low risk
             drawdown = abs(latest["drawdown"])
             volatility_30d = latest["volatility_30d"]
             if drawdown > 20 or volatility_30d > 0.01:
-                risk_proba[0] *= 0.5  # Moderate low risk penalty
+                risk_proba[0] *= 0.5
 
-        # Check volatility expansion and apply penalty
         predicted_vol = volatility_forecast.get("predicted_volatility_7d", 0)
         current_vol = volatility_forecast.get("current_volatility_7d", 0)
-        vol_expansion_ratio = min(predicted_vol / current_vol if current_vol > 0 else 1, 3.0)  # FIX #3: Hard clip at 3.0
+        vol_expansion_ratio = min(predicted_vol / current_vol if current_vol > 0 else 1, 3.0)
 
         if vol_expansion_ratio > 2.0:
-            risk_proba[0] *= 0.5  # Penalize low risk on volatility expansion
+            risk_proba[0] *= 0.5
 
-        # Check deep drawdown
         drawdown = abs(latest["drawdown"])
         if drawdown > 30:
-            risk_proba[0] *= 0.3  # Strong penalty for deep drawdown
+            risk_proba[0] *= 0.3
 
-        # Re-normalize probabilities to sum to 1.0
         risk_proba = risk_proba / risk_proba.sum()
 
-        # Final classification based on highest adjusted probability
         risk_level = int(np.argmax(risk_proba))
         risk_labels = {0: "low", 1: "medium", 2: "high"}
 
-        # Calculate confidence metrics
         max_confidence = float(risk_proba.max())
         confidence_margin = float(risk_proba[np.argsort(risk_proba)[-1]] - risk_proba[np.argsort(risk_proba)[-2]])
         is_uncertain = max_confidence < 0.65 or confidence_margin < 0.10
 
-        # Warning message for uncertain predictions
         warning = None
         if is_uncertain:
             if confidence_margin < 0.10:

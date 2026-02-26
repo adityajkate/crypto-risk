@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto-Risk Lens</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        color-scheme: light;
+        --color-primary: #0f766e;
+        --color-primary-light: #14b8a6;
+        --color-bg: #F8F9FA;
+        --color-card: #FFFFFF;
+        --color-border: #E5E7EB;
+        --color-text-primary: #111827;
+        --color-text-secondary: #6B7280;
+        --color-text-muted: #9CA3AF;
+      }
+
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: var(--color-bg);
+        color: var(--color-text-primary);
+      }
+
+      #root {
+        min-height: 100vh;
+        background-color: var(--color-bg);
+      }
+
+      /* Monospaced font for all numeric values */
+      .font-mono {
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tabular-nums {
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Force tabular numerals on all numeric content */
+      [class*="font-mono"],
+      .indicator-value,
+      .stat-value {
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
+      /* Premium card shadows - no borders */
+      .card-shadow {
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.03);
+      }
+
+      .card-shadow-hover {
+        transition: box-shadow 0.2s ease;
+      }
+
+      .card-shadow-hover:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+      }
+
+      /* Floating Animation Keyframes */
+      @keyframes float-1 {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        33% { transform: translate(30px, -50px) rotate(10deg); }
+        66% { transform: translate(-20px, 20px) rotate(-5deg); }
+      }
+      @keyframes float-2 {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        50% { transform: translate(-40px, -30px) rotate(-15deg); }
+      }
+      @keyframes float-3 {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(20px, 40px) scale(1.1); }
+      }
+      @keyframes glow {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+      }
+      .animate-float-1 { animation: float-1 20s ease-in-out infinite; }
+      .animate-float-2 { animation: float-2 25s ease-in-out infinite; }
+      .animate-float-3 { animation: float-3 22s ease-in-out infinite; }
+      .animate-glow { animation: glow 4s ease-in-out infinite; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "d3": "https://esm.sh/d3@^7.9.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
