@@ -62,9 +62,6 @@ const Dashboard: React.FC = () => {
   const chartData = useMemo(() => {
     if (!apiPriceData) return { priceData: [], distributionData: [] };
 
-    console.log('Dashboard - apiPriceData:', apiPriceData);
-    console.log('Dashboard - current_price:', apiPriceData.current_price);
-
     const basePrice = apiPriceData.current_price;
     const priceChange = apiPriceData.price_change_percentage_24h || 0;
     const totalVolume = apiPriceData.total_volume;

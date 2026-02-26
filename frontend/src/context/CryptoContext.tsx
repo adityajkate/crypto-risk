@@ -43,7 +43,7 @@ export const CryptoProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [coinId, setCoinId] = useState('bitcoin');
   const [analysis, setAnalysis] = useState<CoinAnalysis | null>(null);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -55,8 +55,6 @@ export const CryptoProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         apiClient.getCoinAnalysis(id, 30, signal),
         apiClient.getCoinPrice(id, signal)
       ]);
-      console.log('Received analysis data:', analysisData);
-      console.log('Received price data:', priceInfo);
       setAnalysis(analysisData);
       setPriceData(priceInfo);
     } catch (err: any) {
@@ -92,8 +90,8 @@ export const CryptoProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     fetchData(coinId, controller.signal);
 
-    // Polling interval: 60 seconds (95% reduction from 3s)
-    const POLLING_INTERVAL = parseInt(import.meta.env.VITE_POLLING_INTERVAL || '60000');
+    // Polling interval: 5 seconds
+    const POLLING_INTERVAL = parseInt(import.meta.env.VITE_POLLING_INTERVAL || '5000');
     let intervalId: NodeJS.Timeout;
 
     const startPolling = () => {
