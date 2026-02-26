@@ -229,9 +229,9 @@ async def get_coin_ohlc_data(
 
         # Convert DataFrame to list of dicts
         ohlc_data = []
-        for timestamp, row in ohlc_df.iterrows():
+        for idx, row in ohlc_df.iterrows():
             ohlc_data.append({
-                "timestamp": int(timestamp.timestamp() * 1000),
+                "timestamp": int(row["timestamp"].timestamp() * 1000),
                 "open": float(row["open"]),
                 "high": float(row["high"]),
                 "low": float(row["low"]),
