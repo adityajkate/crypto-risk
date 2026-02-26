@@ -55,6 +55,8 @@ export const CryptoProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         apiClient.getCoinAnalysis(id, 30, signal),
         apiClient.getCoinPrice(id, signal)
       ]);
+      console.log('Received analysis data:', analysisData);
+      console.log('Received price data:', priceInfo);
       setAnalysis(analysisData);
       setPriceData(priceInfo);
     } catch (err: any) {

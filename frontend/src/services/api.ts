@@ -7,11 +7,20 @@ export interface ApiResponse<T> {
 }
 
 export interface PriceData {
+  id: string;
+  symbol: string;
+  name: string;
   current_price: number;
   market_cap: number;
   total_volume: number;
   price_change_24h: number;
   price_change_percentage_24h: number;
+  market_cap_rank: number;
+  circulating_supply: number;
+  total_supply: number;
+  ath: number;
+  atl: number;
+  last_updated: string;
 }
 
 export interface RiskAnalysis {
@@ -48,7 +57,22 @@ export interface RiskAnalysis {
 
 export interface CoinAnalysis {
   coin_id: string;
-  current_price: PriceData;
+  current_price: {
+    id: string;
+    symbol: string;
+    name: string;
+    current_price: number;
+    market_cap: number;
+    total_volume: number;
+    price_change_24h: number;
+    price_change_percentage_24h: number;
+    market_cap_rank: number;
+    circulating_supply: number;
+    total_supply: number;
+    ath: number;
+    atl: number;
+    last_updated: string;
+  };
   risk_analysis: RiskAnalysis;
   data_points: number;
   analysis_period_days: number;

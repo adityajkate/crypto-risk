@@ -109,6 +109,8 @@ class EnhancedApiClient {
         }
 
         const result: ApiResponse<T> = await response.json();
+        console.log(`API Response for ${endpoint}:`, result);
+        console.log(`Returning data:`, result.data);
         return result.data;
 
       } catch (error) {
