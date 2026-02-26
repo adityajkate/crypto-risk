@@ -68,58 +68,55 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
 
   // Fetch historical OHLC data for candlestick
   useEffect(() => {
-    const fetchOHLCData = async () => {
+    const generateSimulatedData = () => {
       setLoading(true);
       try {
-        let days = 1;
+        let dataPoints = 24;
         switch (timeframe) {
-          case '1H': days = 1; break;
-          case '24H': days = 1; break;
-          case '7D': days = 7; break;
-          case '1M': days = 30; break;
+          case '1H': dataPoints = 12; break;
+          case '24H': dataPoints = 24; break;
+          case '7D': dataPoints = 7; break;
+          case '1M': dataPoints = 30; break;
         }
 
-        const response = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`
-        );
-        const data = await response.json();
+        const now = Date.now();
+        const interval = timeframe === '1H' ? 5 * 60 * 1000 :
+                        timeframe === '24H' ? 60 * 60 * 1000 :
+                        timeframe === '7D' ? 24 * 60 * 60 * 1000 :
+                        24 * 60 * 60 * 1000;
 
-        if (Array.isArray(data)) {
-          const formatted = data.map((item: number[]) => ({
-            time: new Date(item[0]).toLocaleTimeString('en-US', {
+        const formatted = Array.from({ length: dataPoints }, (_, i) => {
+          const timestamp = now - (dataPoints - i - 1) * interval;
+          const basePrice = currentPrice * (0.98 + Math.random() * 0.04);
+          const volatility = currentPrice * 0.01;
+
+          return {
+            time: new Date(timestamp).toLocaleTimeString('en-US', {
               hour: '2-digit',
               minute: '2-digit',
               hour12: false
             }),
-            timestamp: item[0],
-            open: item[1],
-            high: item[2],
-            low: item[3],
-            close: item[4],
-            price: item[4]
-          }));
+            timestamp,
+            open: basePrice,
+            high: basePrice + Math.random() * volatility,
+            low: basePrice - Math.random() * volatility,
+            close: basePrice + (Math.random() - 0.5) * volatility,
+            price: basePrice
+          };
+        });
 
-          // Filter based on timeframe
-          let filtered = formatted;
-          if (timeframe === '1H') {
-            filtered = formatted.slice(-12);
-          } else if (timeframe === '24H') {
-            filtered = formatted.slice(-24);
-          }
-
-          setChartData(filtered);
-        }
+        setChartData(formatted);
       } catch (error) {
-        console.error('Failed to fetch OHLC data:', error);
+        console.error('Failed to generate chart data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     if (chartType === 'candlestick' || chartType === 'line') {
-      fetchOHLCData();
+      generateSimulatedData();
     }
-  }, [coinId, timeframe, chartType]);
+  }, [coinId, timeframe, chartType, currentPrice]);
 
   // Live chart simulation
   useEffect(() => {

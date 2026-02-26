@@ -16,24 +16,13 @@ const Dashboard: React.FC = () => {
   const [coinLogo, setCoinLogo] = useState<string>('');
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null);
 
-  // Fetch coin logo
+  // Fetch coin logo from analysis data
   React.useEffect(() => {
-    const fetchCoinLogo = async () => {
-      try {
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${coinId}`);
-        const data = await response.json();
-        if (data.image?.large) {
-          setCoinLogo(data.image.large);
-        }
-      } catch (error) {
-        console.error('Failed to fetch coin logo:', error);
-      }
-    };
-
-    if (coinId) {
-      fetchCoinLogo();
+    if (analysis?.coin_id) {
+      // Use a placeholder or get from backend instead of direct CoinGecko call
+      setCoinLogo(`https://assets.coincap.io/assets/icons/${coinId}@2x.png`);
     }
-  }, [coinId]);
+  }, [coinId, analysis]);
 
   // Fetch technical indicators
   useEffect(() => {
