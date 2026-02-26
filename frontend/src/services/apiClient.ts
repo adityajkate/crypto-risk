@@ -235,16 +235,12 @@ class EnhancedApiClient {
     return this.fetchWithRetry(`/api/v1/coin/${coinId}/indicators?days=${days}`, { signal });
   }
 
-  async healthCheck(signal?: AbortSignal) {
-    const response = await fetch(`${API_BASE_URL}/health`, { signal });
-    return response.json();
+  async getOHLC(coinId: string, days: number = 7, signal?: AbortSignal) {
+    return this.fetchWithRetry(`/api/v1/coin/${coinId}/ohlc?days=${days}`, { signal });
   }
 
-  async getMarketChart(coinId: string, days: number = 7, signal?: AbortSignal) {
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`,
-      { signal }
-    );
+  async healthCheck(signal?: AbortSignal) {
+    const response = await fetch(`${API_BASE_URL}/health`, { signal });
     return response.json();
   }
 }

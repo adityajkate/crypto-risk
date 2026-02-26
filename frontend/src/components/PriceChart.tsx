@@ -68,55 +68,56 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
 
   // Fetch historical OHLC data for candlestick
   useEffect(() => {
-    const generateSimulatedData = () => {
+    const fetchOHLCData = async () => {
       setLoading(true);
       try {
-        let dataPoints = 24;
+        let days = 1;
         switch (timeframe) {
-          case '1H': dataPoints = 12; break;
-          case '24H': dataPoints = 24; break;
-          case '7D': dataPoints = 7; break;
-          case '1M': dataPoints = 30; break;
+          case '1H': days = 1; break;
+          case '24H': days = 1; break;
+          case '7D': days = 7; break;
+          case '1M': days = 30; break;
         }
 
-        const now = Date.now();
-        const interval = timeframe === '1H' ? 5 * 60 * 1000 :
-                        timeframe === '24H' ? 60 * 60 * 1000 :
-                        timeframe === '7D' ? 24 * 60 * 60 * 1000 :
-                        24 * 60 * 60 * 1000;
+        const response = await fetch(`/api/v1/coin/${coinId}/ohlc?days=${days}`);
+        const result = await response.json();
 
-        const formatted = Array.from({ length: dataPoints }, (_, i) => {
-          const timestamp = now - (dataPoints - i - 1) * interval;
-          const basePrice = currentPrice * (0.98 + Math.random() * 0.04);
-          const volatility = currentPrice * 0.01;
-
-          return {
-            time: new Date(timestamp).toLocaleTimeString('en-US', {
+        if (result.success && Array.isArray(result.data.ohlc)) {
+          const formatted = result.data.ohlc.map((item: any) => ({
+            time: new Date(item.timestamp).toLocaleTimeString('en-US', {
               hour: '2-digit',
               minute: '2-digit',
               hour12: false
             }),
-            timestamp,
-            open: basePrice,
-            high: basePrice + Math.random() * volatility,
-            low: basePrice - Math.random() * volatility,
-            close: basePrice + (Math.random() - 0.5) * volatility,
-            price: basePrice
-          };
-        });
+            timestamp: item.timestamp,
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
+            price: item.close
+          }));
 
-        setChartData(formatted);
+          // Filter based on timeframe
+          let filtered = formatted;
+          if (timeframe === '1H') {
+            filtered = formatted.slice(-12);
+          } else if (timeframe === '24H') {
+            filtered = formatted.slice(-24);
+          }
+
+          setChartData(filtered);
+        }
       } catch (error) {
-        console.error('Failed to generate chart data:', error);
+        console.error('Failed to fetch OHLC data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     if (chartType === 'candlestick' || chartType === 'line') {
-      generateSimulatedData();
+      fetchOHLCData();
     }
-  }, [coinId, timeframe, chartType, currentPrice]);
+  }, [coinId, timeframe, chartType]);
 
   // Live chart simulation
   useEffect(() => {
