@@ -71,6 +71,11 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
     const generateChartData = () => {
       setLoading(true);
       try {
+        if (!currentPrice || currentPrice === 0) {
+          setLoading(false);
+          return;
+        }
+
         let dataPoints = 24;
         let timeLabels: string[] = [];
 
@@ -96,21 +101,40 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
             break;
         }
 
-        const now = Date.now();
+        // Generate realistic price trend
         const formatted = Array.from({ length: dataPoints }, (_, i) => {
-          const basePrice = currentPrice * (0.98 + Math.random() * 0.04);
-          const volatility = currentPrice * 0.01;
+          const progress = i / (dataPoints - 1);
+
+          // Create a realistic trend line that ends at current price
+          const trendFactor = Math.sin(progress * Math.PI * 2) * 0.02; // ±2% wave
+          const randomNoise = (Math.random() - 0.5) * 0.005; // ±0.5% noise
+
+          const priceMultiplier = 1 + trendFactor + randomNoise;
+          const price = currentPrice * priceMultiplier;
+
+          // For candlestick data
+          const volatility = currentPrice * 0.003; // 0.3% volatility
+          const open = price + (Math.random() - 0.5) * volatility;
+          const close = price + (Math.random() - 0.5) * volatility;
+          const high = Math.max(open, close) + Math.random() * volatility * 0.5;
+          const low = Math.min(open, close) - Math.random() * volatility * 0.5;
 
           return {
             time: timeLabels[i],
-            timestamp: now - (dataPoints - i - 1) * 60000,
-            open: basePrice,
-            high: basePrice + Math.random() * volatility,
-            low: basePrice - Math.random() * volatility,
-            close: basePrice + (Math.random() - 0.5) * volatility,
-            price: basePrice
+            timestamp: Date.now() - (dataPoints - i - 1) * 60000,
+            open,
+            high,
+            low,
+            close,
+            price
           };
         });
+
+        // Adjust last data point to match current price exactly
+        if (formatted.length > 0) {
+          formatted[formatted.length - 1].price = currentPrice;
+          formatted[formatted.length - 1].close = currentPrice;
+        }
 
         setChartData(formatted);
       } catch (error) {
