@@ -66,9 +66,9 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
   const [liveData, setLiveData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Generate chart data based on current price
+  // Fetch real OHLC data from backend
   useEffect(() => {
-    const generateChartData = () => {
+    const fetchOHLCData = async () => {
       setLoading(true);
       try {
         if (!currentPrice || currentPrice === 0) {
@@ -76,76 +76,51 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
           return;
         }
 
-        let dataPoints = 24;
-        let timeLabels: string[] = [];
-
+        let days = 1;
         switch (timeframe) {
-          case '1H':
-            dataPoints = 12;
-            timeLabels = Array.from({ length: dataPoints }, (_, i) => `${i * 5}m`);
-            break;
-          case '24H':
-            dataPoints = 24;
-            timeLabels = Array.from({ length: dataPoints }, (_, i) => {
-              const hour = i.toString().padStart(2, '0');
-              return `${hour}:00`;
-            });
-            break;
-          case '7D':
-            dataPoints = 7;
-            timeLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-            break;
-          case '1M':
-            dataPoints = 30;
-            timeLabels = Array.from({ length: dataPoints }, (_, i) => `Day ${i + 1}`);
-            break;
+          case '1H': days = 1; break;
+          case '24H': days = 1; break;
+          case '7D': days = 7; break;
+          case '1M': days = 30; break;
         }
 
-        // Generate realistic price trend
-        const formatted = Array.from({ length: dataPoints }, (_, i) => {
-          const progress = i / (dataPoints - 1);
+        const response = await fetch(`/api/v1/coin/${coinId}/ohlc?days=${days}`);
+        const result = await response.json();
 
-          // Create a realistic trend line that ends at current price
-          const trendFactor = Math.sin(progress * Math.PI * 2) * 0.02; // ±2% wave
-          const randomNoise = (Math.random() - 0.5) * 0.005; // ±0.5% noise
+        if (result.success && Array.isArray(result.data.ohlc)) {
+          const formatted = result.data.ohlc.map((item: any) => ({
+            time: new Date(item.timestamp).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }),
+            timestamp: item.timestamp,
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
+            price: item.close
+          }));
 
-          const priceMultiplier = 1 + trendFactor + randomNoise;
-          const price = currentPrice * priceMultiplier;
+          // Filter based on timeframe
+          let filtered = formatted;
+          if (timeframe === '1H') {
+            filtered = formatted.slice(-12);
+          } else if (timeframe === '24H') {
+            filtered = formatted.slice(-24);
+          }
 
-          // For candlestick data
-          const volatility = currentPrice * 0.003; // 0.3% volatility
-          const open = price + (Math.random() - 0.5) * volatility;
-          const close = price + (Math.random() - 0.5) * volatility;
-          const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-          const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-
-          return {
-            time: timeLabels[i],
-            timestamp: Date.now() - (dataPoints - i - 1) * 60000,
-            open,
-            high,
-            low,
-            close,
-            price
-          };
-        });
-
-        // Adjust last data point to match current price exactly
-        if (formatted.length > 0) {
-          formatted[formatted.length - 1].price = currentPrice;
-          formatted[formatted.length - 1].close = currentPrice;
+          setChartData(filtered);
         }
-
-        setChartData(formatted);
       } catch (error) {
-        console.error('Failed to generate chart data:', error);
+        console.error('Failed to fetch OHLC data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     if (chartType === 'candlestick' || chartType === 'line') {
-      generateChartData();
+      fetchOHLCData();
     }
   }, [coinId, timeframe, chartType, currentPrice]);
 
