@@ -14,6 +14,7 @@ const Dashboard: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'1H' | '24H' | '7D' | '1M'>('24H');
   const { currency, coinId, setCurrency, setCoinId, analysis, priceData: apiPriceData, loading, error } = useCrypto();
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null);
+  const [logoError, setLogoError] = useState(false);
 
   // Debug logging
   console.log('Dashboard render:', {
@@ -24,8 +25,15 @@ const Dashboard: React.FC = () => {
     analysis
   });
 
-  // Set coin logo immediately
-  const coinLogo = `https://assets.coincap.io/assets/icons/${coinId}@2x.png`;
+  // Set coin logo with fallback
+  const coinLogo = logoError
+    ? `https://cryptologos.cc/logos/${currency.toLowerCase()}-${apiPriceData?.symbol || 'btc'}-logo.png`
+    : `https://assets.coincap.io/assets/icons/${coinId}@2x.png`;
+
+  // Reset logo error when coin changes
+  React.useEffect(() => {
+    setLogoError(false);
+  }, [coinId]);
 
   // Fetch technical indicators
   useEffect(() => {
@@ -175,6 +183,7 @@ const Dashboard: React.FC = () => {
               src={coinLogo}
               alt={currency}
               className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-slate-200"
+              onError={() => setLogoError(true)}
             />
           )}
           <div>
