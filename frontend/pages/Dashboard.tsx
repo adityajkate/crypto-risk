@@ -6,7 +6,7 @@ import CoinSearch from '../components/CoinSearch';
 import PriceChart from '../components/PriceChart';
 import IndicatorTooltip from '../components/IndicatorTooltip';
 import { useCrypto } from '../context/CryptoContext';
-import { apiService, TechnicalIndicators } from '../services/api';
+import { apiClient, TechnicalIndicators } from '../services/apiClient';
 import { formatLargeNumber, formatPercentage, formatPrice, formatDecimal, formatIndicator } from '../utils/formatters';
 import { getSeed, seededRandom } from '../utils/dataHelpers';
 
@@ -39,7 +39,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchIndicators = async () => {
       try {
-        const data = await apiService.getIndicators(coinId, 30);
+        const data = await apiClient.getIndicators(coinId, 30);
         if (data.indicators) {
           setIndicators(data.indicators);
         }

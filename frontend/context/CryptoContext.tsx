@@ -1,6 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
-import { apiClient } from '../services/apiClient';
-import { CoinAnalysis, PriceData } from '../services/api';
+import { apiClient, CoinAnalysis, PriceData } from '../services/apiClient';
 
 interface CryptoContextType {
   currency: string;

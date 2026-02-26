@@ -251,3 +251,16 @@ class EnhancedApiClient {
 
 export const apiClient = new EnhancedApiClient();
 export { ApiError };
+
+// Re-export types from api.ts for convenience
+export type {
+  ApiResponse,
+  PriceData,
+  RiskAnalysis,
+  CoinAnalysis,
+  TrendingCoin,
+  GlobalMarket,
+  NewsPost,
+  SentimentData,
+  TechnicalIndicators
+} from './api';
