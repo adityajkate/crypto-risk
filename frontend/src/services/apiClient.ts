@@ -235,10 +235,6 @@ class EnhancedApiClient {
     return this.fetchWithRetry(`/api/v1/coin/${coinId}/indicators?days=${days}`, { signal });
   }
 
-  async getOHLC(coinId: string, days: number = 7, signal?: AbortSignal) {
-    return this.fetchWithRetry(`/api/v1/coin/${coinId}/ohlc?days=${days}`, { signal });
-  }
-
   async healthCheck(signal?: AbortSignal) {
     const response = await fetch(`${API_BASE_URL}/health`, { signal });
     return response.json();

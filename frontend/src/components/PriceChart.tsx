@@ -66,58 +66,64 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
   const [liveData, setLiveData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch historical OHLC data for candlestick
+  // Generate chart data based on current price
   useEffect(() => {
-    const fetchOHLCData = async () => {
+    const generateChartData = () => {
       setLoading(true);
       try {
-        let days = 1;
+        let dataPoints = 24;
+        let timeLabels: string[] = [];
+
         switch (timeframe) {
-          case '1H': days = 1; break;
-          case '24H': days = 1; break;
-          case '7D': days = 7; break;
-          case '1M': days = 30; break;
+          case '1H':
+            dataPoints = 12;
+            timeLabels = Array.from({ length: dataPoints }, (_, i) => `${i * 5}m`);
+            break;
+          case '24H':
+            dataPoints = 24;
+            timeLabels = Array.from({ length: dataPoints }, (_, i) => {
+              const hour = i.toString().padStart(2, '0');
+              return `${hour}:00`;
+            });
+            break;
+          case '7D':
+            dataPoints = 7;
+            timeLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            break;
+          case '1M':
+            dataPoints = 30;
+            timeLabels = Array.from({ length: dataPoints }, (_, i) => `Day ${i + 1}`);
+            break;
         }
 
-        const response = await fetch(`/api/v1/coin/${coinId}/ohlc?days=${days}`);
-        const result = await response.json();
+        const now = Date.now();
+        const formatted = Array.from({ length: dataPoints }, (_, i) => {
+          const basePrice = currentPrice * (0.98 + Math.random() * 0.04);
+          const volatility = currentPrice * 0.01;
 
-        if (result.success && Array.isArray(result.data.ohlc)) {
-          const formatted = result.data.ohlc.map((item: any) => ({
-            time: new Date(item.timestamp).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false
-            }),
-            timestamp: item.timestamp,
-            open: item.open,
-            high: item.high,
-            low: item.low,
-            close: item.close,
-            price: item.close
-          }));
+          return {
+            time: timeLabels[i],
+            timestamp: now - (dataPoints - i - 1) * 60000,
+            open: basePrice,
+            high: basePrice + Math.random() * volatility,
+            low: basePrice - Math.random() * volatility,
+            close: basePrice + (Math.random() - 0.5) * volatility,
+            price: basePrice
+          };
+        });
 
-          // Filter based on timeframe
-          let filtered = formatted;
-          if (timeframe === '1H') {
-            filtered = formatted.slice(-12);
-          } else if (timeframe === '24H') {
-            filtered = formatted.slice(-24);
-          }
-
-          setChartData(filtered);
-        }
+        setChartData(formatted);
       } catch (error) {
-        console.error('Failed to fetch OHLC data:', error);
+        console.error('Failed to generate chart data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     if (chartType === 'candlestick' || chartType === 'line') {
-      fetchOHLCData();
+      generateChartData();
     }
-  }, [coinId, timeframe, chartType]);
+  }, [coinId, timeframe, chartType, currentPrice]);
 
   // Live chart simulation
   useEffect(() => {

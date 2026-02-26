@@ -213,44 +213,6 @@ async def get_coin_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/coin/{coin_id}/ohlc")
-async def get_coin_ohlc(
-    coin_id: str,
-    days: int = Query(default=7, ge=1, le=365, description="Days of historical data")
-):
-    """
-    Get historical OHLC (Open, High, Low, Close) data for a coin.
-
-    Returns candlestick data for charting.
-    """
-    try:
-        ohlc_df = await coingecko_client.get_coin_ohlc(coin_id, days=days)
-
-        # Convert DataFrame to list of dicts
-        ohlc_data = []
-        for idx, row in ohlc_df.iterrows():
-            ohlc_data.append({
-                "timestamp": int(idx.timestamp() * 1000),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"])
-            })
-
-        return {
-            "success": True,
-            "data": {
-                "coin_id": coin_id,
-                "ohlc": ohlc_data,
-                "days": days,
-                "data_points": len(ohlc_data)
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/api/v1/coin/{coin_id}/indicators")
 async def get_coin_indicators(
     coin_id: str,

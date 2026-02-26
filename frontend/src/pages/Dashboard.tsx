@@ -16,12 +16,11 @@ const Dashboard: React.FC = () => {
   const [coinLogo, setCoinLogo] = useState<string>('');
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null);
 
-  // Fetch coin logo from backend proxy
+  // Get coin logo from analysis data
   React.useEffect(() => {
-    if (coinId) {
-      // Use backend proxy to get coin logo
-      const logoUrl = `https://assets.coincap.io/assets/icons/${coinId}@2x.png`;
-      setCoinLogo(`/api/v1/proxy/image?url=${encodeURIComponent(logoUrl)}`);
+    if (analysis?.current_price?.name) {
+      // Use CoinCap for logo (no auth required)
+      setCoinLogo(`https://assets.coincap.io/assets/icons/${coinId}@2x.png`);
     }
   }, [coinId, analysis]);
 
