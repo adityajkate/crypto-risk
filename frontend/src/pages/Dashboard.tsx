@@ -13,16 +13,19 @@ import { getSeed, seededRandom } from '../utils/dataHelpers';
 const Dashboard: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'1H' | '24H' | '7D' | '1M'>('24H');
   const { currency, coinId, setCurrency, setCoinId, analysis, priceData: apiPriceData, loading, error } = useCrypto();
-  const [coinLogo, setCoinLogo] = useState<string>('');
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null);
 
-  // Get coin logo from analysis data
-  React.useEffect(() => {
-    if (analysis?.current_price?.name) {
-      // Use CoinCap for logo (no auth required)
-      setCoinLogo(`https://assets.coincap.io/assets/icons/${coinId}@2x.png`);
-    }
-  }, [coinId, analysis]);
+  // Debug logging
+  console.log('Dashboard render:', {
+    loading,
+    hasApiPriceData: !!apiPriceData,
+    hasAnalysis: !!analysis,
+    apiPriceData,
+    analysis
+  });
+
+  // Set coin logo immediately
+  const coinLogo = `https://assets.coincap.io/assets/icons/${coinId}@2x.png`;
 
   // Fetch technical indicators
   useEffect(() => {
@@ -128,7 +131,7 @@ const Dashboard: React.FC = () => {
 
   const regime = getRegime(riskScore);
 
-  if (loading && !apiPriceData) {
+  if (loading && !apiPriceData && !analysis) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -139,13 +142,25 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (error && !apiPriceData && !analysis) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <AlertTriangle className="text-red-500 mx-auto mb-4" size={48} />
           <p className="text-red-600 font-semibold mb-2">Failed to load data</p>
           <p className="text-slate-600 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if we don't have data yet
+  if (!apiPriceData || !analysis) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading market data...</p>
         </div>
       </div>
     );
