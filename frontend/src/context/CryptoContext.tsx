@@ -129,7 +129,7 @@ export const CryptoProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     startPolling();
 
     return () => {
-      controller.abort();
+      // Don't abort the controller here - let the fetch complete
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
