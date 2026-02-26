@@ -131,7 +131,7 @@ const Dashboard: React.FC = () => {
 
   const regime = getRegime(riskScore);
 
-  if (loading && !apiPriceData && !analysis) {
+  if (loading && !apiPriceData) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -142,7 +142,7 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  if (error && !apiPriceData && !analysis) {
+  if (error && !apiPriceData) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -154,8 +154,8 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  // Don't render if we don't have data yet
-  if (!apiPriceData || !analysis) {
+  // Don't render if we don't have price data
+  if (!apiPriceData) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
