@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
 
 interface CoinSuggestion {
   id: string;
@@ -31,6 +32,7 @@ const CoinSearch: React.FC<CoinSearchProps> = ({ onSelectCoin }) => {
   const [loading, setLoading] = useState(false);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const searchRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -44,6 +46,11 @@ const CoinSearch: React.FC<CoinSearchProps> = ({ onSelectCoin }) => {
   }, []);
 
   useEffect(() => {
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     if (searchTerm.length < 2) {
       setSuggestions(POPULAR_COINS);
       return;
@@ -51,29 +58,31 @@ const CoinSearch: React.FC<CoinSearchProps> = ({ onSelectCoin }) => {
 
     const searchCoins = async () => {
       setLoading(true);
-      try {
-        const response = await fetch(`https://api.coingecko.com/api/v3/search?query=${searchTerm}`);
-        const data = await response.json();
+      abortControllerRef.current = new AbortController();
 
-        if (data.coins) {
-          setSuggestions(data.coins.slice(0, 8).map((coin: any) => ({
-            id: coin.id,
-            name: coin.name,
-            symbol: coin.symbol.toUpperCase(),
-            thumb: coin.thumb,
-            large: coin.large
-          })));
+      try {
+        const result = await apiClient.searchCoins(searchTerm, abortControllerRef.current.signal);
+
+        if (result.success && result.data.coins) {
+          setSuggestions(result.data.coins);
         }
-      } catch (error) {
-        console.error('Search error:', error);
-        setSuggestions(POPULAR_COINS);
+      } catch (error: any) {
+        if (error?.isAborted !== true && error?.name !== 'AbortError') {
+          console.error('Search error:', error);
+          setSuggestions(POPULAR_COINS);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     const debounce = setTimeout(searchCoins, 300);
-    return () => clearTimeout(debounce);
+    return () => {
+      clearTimeout(debounce);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [searchTerm]);
 
   const handleSelect = (coin: CoinSuggestion) => {

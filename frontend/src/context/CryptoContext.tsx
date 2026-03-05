@@ -91,8 +91,8 @@ export const CryptoProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     fetchData(coinId, controller.signal);
 
-    // Polling interval: 5 seconds
-    const POLLING_INTERVAL = parseInt(import.meta.env.VITE_POLLING_INTERVAL || '5000');
+    // Polling interval: 30 seconds (reduced from 5s to avoid API quota issues)
+    const POLLING_INTERVAL = parseInt(import.meta.env.VITE_POLLING_INTERVAL || '30000');
     let intervalId: NodeJS.Timeout;
 
     const startPolling = () => {

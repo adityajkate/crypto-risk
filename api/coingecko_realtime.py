@@ -123,14 +123,15 @@ class CoinGeckoRealtimeClient:
 
         global_data = data.get("data", {})
         return {
-            "total_market_cap_usd": global_data.get("total_market_cap", {}).get("usd"),
-            "total_volume_usd": global_data.get("total_volume", {}).get("usd"),
-            "market_cap_percentage": global_data.get("market_cap_percentage", {}),
-            "active_cryptocurrencies": global_data.get("active_cryptocurrencies"),
-            "markets": global_data.get("markets"),
+            "total_market_cap": global_data.get("total_market_cap", {}).get("usd"),
+            "total_volume": global_data.get("total_volume", {}).get("usd"),
             "market_cap_change_percentage_24h": global_data.get("market_cap_change_percentage_24h_usd"),
-            "updated_at": global_data.get("updated_at")
+            "active_cryptocurrencies": global_data.get("active_cryptocurrencies")
         }
+
+    async def search_coins(self, query: str) -> Dict[str, Any]:
+        """Search for coins by name or symbol."""
+        return await self._rate_limited_request("search", params={"query": query})
 
     async def get_multiple_coins_data(self, coin_ids: List[str]) -> List[Dict[str, Any]]:
         """Get data for multiple coins at once."""

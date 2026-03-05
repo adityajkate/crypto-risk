@@ -8,10 +8,8 @@ import IndicatorTooltip from '../components/IndicatorTooltip';
 import { useCrypto } from '../context/CryptoContext';
 import { apiClient, TechnicalIndicators } from '../services/apiClient';
 import { formatLargeNumber, formatPercentage, formatPrice, formatDecimal, formatIndicator } from '../utils/formatters';
-import { getSeed, seededRandom } from '../utils/dataHelpers';
 
 const Dashboard: React.FC = () => {
-  const [timeframe, setTimeframe] = useState<'1H' | '24H' | '7D' | '1M'>('24H');
   const { currency, coinId, setCurrency, setCoinId, analysis, priceData: apiPriceData, loading, error } = useCrypto();
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null);
   const [logoError, setLogoError] = useState(false);
@@ -58,66 +56,15 @@ const Dashboard: React.FC = () => {
     setCoinId(id);
   };
 
-  // Generate chart data based on timeframe
-  const chartData = useMemo(() => {
-    if (!apiPriceData) return { priceData: [], distributionData: [] };
-
-    const basePrice = apiPriceData.current_price;
-    const priceChange = apiPriceData.price_change_percentage_24h || 0;
-    const totalVolume = apiPriceData.total_volume;
-
-    let dataPoints = 24;
-    let timeLabels: string[] = [];
-
-    switch (timeframe) {
-      case '1H':
-        dataPoints = 12;
-        timeLabels = Array.from({ length: dataPoints }, (_, i) => `${i * 5}m`);
-        break;
-      case '24H':
-        dataPoints = 24;
-        timeLabels = Array.from({ length: dataPoints }, (_, i) => {
-          const hour = i.toString().padStart(2, '0');
-          return `${hour}:00`;
-        });
-        break;
-      case '7D':
-        dataPoints = 7;
-        timeLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        break;
-      case '1M':
-        dataPoints = 30;
-        timeLabels = Array.from({ length: dataPoints }, (_, i) => `Day ${i + 1}`);
-        break;
-    }
-
-    // Generate realistic price movement with seeded random for proper memoization
-    const seed = getSeed(coinId + timeframe);
-    const priceData = Array.from({ length: dataPoints }, (_, i) => {
-      const progress = i / dataPoints;
-      const trend = (priceChange / 100) * basePrice * progress;
-      const volatility = Math.sin(i * 0.5) * (basePrice * 0.01);
-      const noise = (seededRandom(seed, i) - 0.5) * (basePrice * 0.005);
-
-      return {
-        time: timeLabels[i],
-        price: Math.max(0, basePrice - trend + volatility + noise),
-        volume: Math.floor(totalVolume / dataPoints * (0.8 + seededRandom(seed, i + 1000) * 0.4))
-      };
-    });
-
-    // Risk distribution - filter out zero values for accurate visualization
+  // Risk distribution data from backend
+  const distributionData = useMemo(() => {
     const probs = analysis?.risk_analysis?.risk_assessment?.probabilities;
-    const distributionData = probs ? [
+    return probs ? [
       { name: 'Low Risk', value: probs.low * 100, color: '#10b981' },
       { name: 'Medium Risk', value: probs.medium * 100, color: '#f59e0b' },
       { name: 'High Risk', value: probs.high * 100, color: '#ef4444' }
     ].filter(item => item.value > 0) : [];
-
-    return { priceData, distributionData };
-  }, [apiPriceData, timeframe, analysis]);
-
-  const { priceData, distributionData } = chartData;
+  }, [analysis]);
 
   // Extract real data from API
   const basePrice = apiPriceData?.current_price || 0;
@@ -259,27 +206,10 @@ const Dashboard: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
             <div>
               <h3 className="text-lg font-semibold text-slate-900">{currency}/USD Price Chart</h3>
-              <p className="text-sm text-slate-500 mt-1">Historical price movement</p>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-              {(['1H', '24H', '7D', '1M'] as const).map((tf) => (
-                <button
-                  key={tf}
-                  onClick={() => setTimeframe(tf)}
-                  aria-pressed={tf === timeframe}
-                  aria-label={`View ${tf} timeframe`}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                    tf === timeframe
-                      ? 'bg-teal-600 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {tf}
-                </button>
-              ))}
+              <p className="text-sm text-slate-500 mt-1">7-day historical price movement</p>
             </div>
           </div>
-          <PriceChart coinId={coinId} timeframe={timeframe} currentPrice={basePrice} />
+          <PriceChart coinId={coinId} currentPrice={basePrice} />
         </div>
 
         {/* Risk Analytics Section */}

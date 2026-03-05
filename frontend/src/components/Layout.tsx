@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Activity, 
-  ShieldAlert, 
-  History, 
-  Info, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Activity,
+  Menu,
   X,
   Zap
 } from 'lucide-react';
@@ -27,9 +24,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/dashboard', label: 'Overview', icon: <LayoutDashboard size={20} /> },
     { path: '/sentiment', label: 'Sentiment', icon: <Activity size={20} /> },
-    { path: '/risk', label: 'Risk Insights', icon: <ShieldAlert size={20} /> },
-    { path: '/history', label: 'Patterns', icon: <History size={20} /> },
-    { path: '/about', label: 'Methodology', icon: <Info size={20} /> },
   ];
 
   return (

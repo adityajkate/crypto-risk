@@ -67,7 +67,11 @@ class EmbeddingWorker:
         await loop.run_in_executor(None, self.load_model)
 
         logger.info("Embedding worker started")
+        print("=" * 60)
+        print("Embedding worker started and ready")
+        print("=" * 60)
 
+        processed_count = 0
         while self.running:
             try:
                 # Import queues from event_store to get initialized references
@@ -83,6 +87,11 @@ class EmbeddingWorker:
                     timeout=1.0
                 )
 
+                processed_count += 1
+                coin = item.get('coin', 'unknown')
+                source = item.get('source', 'unknown')
+                print(f"[Embedding Worker] Processing article #{processed_count} for {coin} from {source}")
+
                 # Process the item (will use CLUSTER_QUEUE from event_store)
                 await self.process_item(item)
 
@@ -91,6 +100,7 @@ class EmbeddingWorker:
                 continue
             except Exception as e:
                 logger.error(f"Error in embedding worker: {e}")
+                print(f"[Embedding Worker] ERROR: {e}")
                 await asyncio.sleep(1)
 
     async def stop(self):

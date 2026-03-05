@@ -1,7 +1,8 @@
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:8000';
 
 async function testApi() {
   try {
+    console.log(`Testing API at: ${API_BASE_URL}`);
     const response = await fetch(`${API_BASE_URL}/api/v1/coin/bitcoin/price`);
     const result = await response.json();
     console.log('Full response:', JSON.stringify(result, null, 2));

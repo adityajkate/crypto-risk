@@ -92,7 +92,8 @@ async def startup_event():
 
     # Start background tasks with dynamic coin tracking
     # Scrapers will track coins dynamically as users search for them
-    background_tasks.append(asyncio.create_task(layer_a_scraper.run_dynamic(interval_minutes=15)))
+    # Keep Layer A closer to Layer B cadence so non-Reddit news appears faster.
+    background_tasks.append(asyncio.create_task(layer_a_scraper.run_dynamic(interval_minutes=5)))
     background_tasks.append(asyncio.create_task(layer_b_scraper.run_dynamic(interval_minutes=5)))
     background_tasks.append(asyncio.create_task(embedding_worker.run()))
     background_tasks.append(asyncio.create_task(clustering_worker.run()))
@@ -364,6 +365,37 @@ async def get_coin_risk(coin_id: str, days: int = Query(default=30, ge=7, le=365
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/v1/coins/search")
+async def search_coins(query: str = Query(..., min_length=1)):
+    """Search for coins by name or symbol."""
+    try:
+        results = await coingecko_client.search_coins(query)
+
+        # Format results to match frontend expectations
+        coins = results.get("coins", [])
+        formatted_coins = [
+            {
+                "id": coin.get("id"),
+                "name": coin.get("name"),
+                "symbol": coin.get("symbol", "").upper(),
+                "thumb": coin.get("thumb"),
+                "large": coin.get("large")
+            }
+            for coin in coins[:8]  # Limit to 8 results
+        ]
+
+        return {
+            "success": True,
+            "data": {
+                "coins": formatted_coins,
+                "count": len(formatted_coins)
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/v1/trending")
 async def get_trending_coins():
     """Get trending coins with risk analysis."""
@@ -483,22 +515,29 @@ async def get_sentiment(currency: str):
     Get real-time sentiment analysis for a cryptocurrency.
 
     Returns quantitative event metrics from in-memory event store.
+
+    Args:
+        currency: CoinGecko ID (e.g., 'bitcoin', 'avalanche-2')
     """
     try:
-        coin = currency.lower()
+        # Import coin metadata utilities
+        from shared.coin_metadata import get_sentiment_key
+
+        # Convert CoinGecko ID to sentiment key
+        sentiment_key = get_sentiment_key(currency.lower())
 
         # Add coin to tracking if not already tracked
-        add_coin_to_tracking(coin)
+        add_coin_to_tracking(sentiment_key)
 
         # Get data from event store
-        coin_data = get_coin_data(coin)
+        coin_data = get_coin_data(sentiment_key)
 
         if not coin_data:
             # Coin was just added, return empty state
             return {
                 "success": True,
                 "data": {
-                    "coin": coin,
+                    "coin": sentiment_key,
                     "global_metrics": {
                         "total_mentions": 0,
                         "weighted_event_score": 0.0,
@@ -515,12 +554,12 @@ async def get_sentiment(currency: str):
             }
 
         # Get cluster summaries
-        clusters = get_cluster_summary(coin)
+        clusters = get_cluster_summary(sentiment_key)
 
         return {
             "success": True,
             "data": {
-                "coin": coin,
+                "coin": sentiment_key,
                 "global_metrics": coin_data["global_metrics"],
                 "clusters": clusters,
                 "last_updated": coin_data["last_updated"].isoformat(),
@@ -544,20 +583,27 @@ async def get_sentiment_raw(
     Get raw articles/posts for a cryptocurrency.
 
     Returns the actual scraped content from the last 180 minutes.
+
+    Args:
+        currency: CoinGecko ID (e.g., 'bitcoin', 'avalanche-2')
     """
     try:
-        coin = currency.lower()
+        # Import coin metadata utilities
+        from shared.coin_metadata import get_sentiment_key
+
+        # Convert CoinGecko ID to sentiment key
+        sentiment_key = get_sentiment_key(currency.lower())
 
         # Add coin to tracking if not already tracked
-        add_coin_to_tracking(coin)
+        add_coin_to_tracking(sentiment_key)
 
         # Get raw articles
-        articles = get_raw_articles(coin, limit=limit)
+        articles = get_raw_articles(sentiment_key, limit=limit)
 
         return {
             "success": True,
             "data": {
-                "coin": coin,
+                "coin": sentiment_key,
                 "articles": articles,
                 "count": len(articles),
                 "data_window_minutes": 180,
@@ -579,7 +625,9 @@ async def get_article_detail(currency: str, article_id: str):
     Returns complete article content for in-app display (no redirect needed).
     """
     try:
-        coin = currency.lower()
+        # Convert CoinGecko ID to sentiment storage key
+        from shared.coin_metadata import get_sentiment_key
+        coin = get_sentiment_key(currency.lower())
 
         # Get article by ID
         article = get_article_by_id(coin, article_id)
@@ -611,19 +659,26 @@ async def get_sentiment_summary(currency: str):
     - Key topics and themes
     - Major events mentioned
     - Risk indicators
+
+    Args:
+        currency: CoinGecko ID (e.g., 'bitcoin', 'avalanche-2')
     """
     try:
-        coin = currency.lower()
+        # Import coin metadata utilities
+        from shared.coin_metadata import get_sentiment_key
+
+        # Convert CoinGecko ID to sentiment key
+        sentiment_key = get_sentiment_key(currency.lower())
 
         # Get all articles
-        articles = get_raw_articles(coin, limit=500)
+        articles = get_raw_articles(sentiment_key, limit=500)
 
         if not articles:
             return {
                 "success": True,
                 "data": {
-                    "coin": coin,
-                    "summary": f"No recent news data available for {coin}. Please wait 5-15 minutes for articles to be collected.",
+                    "coin": sentiment_key,
+                    "summary": f"No recent news data available for {sentiment_key}. Please wait 5-15 minutes for articles to be collected.",
                     "article_count": 0,
                     "time_window_minutes": 180,
                     "key_topics": [],
@@ -633,7 +688,7 @@ async def get_sentiment_summary(currency: str):
             }
 
         # Get coin data for metrics
-        coin_data = get_coin_data(coin)
+        coin_data = get_coin_data(sentiment_key)
 
         # Analyze articles
         total_articles = len(articles)
@@ -647,14 +702,14 @@ async def get_sentiment_summary(currency: str):
         all_titles = " ".join([a.get("title", "") for a in articles])
         # Remove common words and extract meaningful terms
         words = re.findall(r'\b[A-Za-z]{4,}\b', all_titles.lower())
-        common_words = {'bitcoin', 'ethereum', 'crypto', 'cryptocurrency', 'coin', 'price', 'market', 'trading', coin.lower()}
+        common_words = {'bitcoin', 'ethereum', 'crypto', 'cryptocurrency', 'coin', 'price', 'market', 'trading', sentiment_key.lower()}
         filtered_words = [w for w in words if w not in common_words]
         word_counts = Counter(filtered_words)
         key_topics = [word for word, count in word_counts.most_common(10)]
 
         # Generate summary text
         summary_parts = []
-        summary_parts.append(f"Analysis of {total_articles} articles about {coin.upper()} from the last 3 hours.")
+        summary_parts.append(f"Analysis of {total_articles} articles about {sentiment_key.upper()} from the last 3 hours.")
         summary_parts.append(f"Sources: {layer_a_count} authoritative news articles and {layer_b_count} social media posts.")
 
         if coin_data:
@@ -685,7 +740,7 @@ async def get_sentiment_summary(currency: str):
         return {
             "success": True,
             "data": {
-                "coin": coin,
+                "coin": sentiment_key,
                 "summary": summary_text,
                 "article_count": total_articles,
                 "layer_a_count": layer_a_count,

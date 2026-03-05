@@ -17,11 +17,19 @@ class LayerBScraper:
         self.client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
         self.running = False
 
-    async def scrape_reddit(self, coin: str, subreddit: str = "CryptoCurrency") -> List[Dict[str, Any]]:
+    async def scrape_reddit(self, coin: str, subreddit: str = "CryptoCurrency", keywords: List[str] = None) -> List[Dict[str, Any]]:
         """
         Scrape Reddit posts mentioning the coin.
         Uses Reddit JSON API (no auth required for public posts).
+
+        Args:
+            coin: Primary coin identifier (for storage)
+            subreddit: Subreddit to scrape
+            keywords: List of keywords to match (name, symbol, aliases)
         """
+        if keywords is None:
+            keywords = [coin]
+
         try:
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=100"
             headers = {"User-Agent": "CryptoRiskLens/1.0"}
@@ -36,10 +44,10 @@ class LayerBScraper:
                 post_data = post.get("data", {})
                 title = post_data.get("title", "")
                 selftext = post_data.get("selftext", "")
-                text = f"{title}. {selftext}"
+                text = f"{title}. {selftext}".lower()
 
-                # Check if post mentions the coin
-                if coin.lower() in text.lower():
+                # Check if post mentions any of the coin keywords
+                if any(keyword.lower() in text for keyword in keywords):
                     # Try to get image from Reddit post
                     image_url = None
                     if post_data.get("thumbnail") and post_data.get("thumbnail").startswith("http"):
@@ -129,11 +137,18 @@ class LayerBScraper:
             logger.error(f"Error scraping Twitter via Nitter: {e}")
             return []
 
-    async def scrape_bitcointalk(self, coin: str) -> List[Dict[str, Any]]:
+    async def scrape_bitcointalk(self, coin: str, keywords: List[str] = None) -> List[Dict[str, Any]]:
         """
         Scrape BitcoinTalk forum posts.
         Uses RSS feed for recent posts.
+
+        Args:
+            coin: Primary coin identifier (for storage)
+            keywords: List of keywords to match (name, symbol, aliases)
         """
+        if keywords is None:
+            keywords = [coin]
+
         try:
             # BitcoinTalk recent posts RSS
             url = "https://bitcointalk.org/index.php?action=.xml;type=rss"
@@ -148,9 +163,10 @@ class LayerBScraper:
             for entry in feed.entries[:50]:
                 title = entry.get("title", "")
                 summary = entry.get("summary", "")
-                text = f"{title}. {summary}"
+                text = f"{title}. {summary}".lower()
 
-                if coin.lower() in text.lower():
+                # Check if post mentions any of the coin keywords
+                if any(keyword.lower() in text for keyword in keywords):
                     posts.append({
                         "coin": coin,
                         "title": title,
@@ -173,17 +189,24 @@ class LayerBScraper:
             logger.error(f"Error scraping BitcoinTalk: {e}")
             return []
 
-    async def scrape_all_sources(self, coin: str):
-        """Scrape all Layer B sources for a coin."""
+    async def scrape_all_sources(self, coin: str, keywords: List[str] = None):
+        """Scrape all Layer B sources for a coin.
 
-        # Define search keywords for the coin
-        keywords = [coin, f"${coin[:3].upper()}", f"#{coin}"]
+        Args:
+            coin: Primary coin identifier (for storage)
+            keywords: List of keywords to match (name, symbol, aliases)
+        """
+        if keywords is None:
+            keywords = [coin]
+
+        # Add hashtag and ticker variants for social media
+        social_keywords = keywords + [f"${kw.upper()}" for kw in keywords if len(kw) <= 5]
 
         tasks = [
-            self.scrape_reddit(coin, "CryptoCurrency"),
-            self.scrape_reddit(coin, coin.lower()),  # Coin-specific subreddit
-            self.scrape_twitter_nitter(coin, keywords),
-            self.scrape_bitcointalk(coin),
+            self.scrape_reddit(coin, "CryptoCurrency", keywords),
+            self.scrape_reddit(coin, coin.lower(), keywords),  # Coin-specific subreddit
+            self.scrape_twitter_nitter(coin, social_keywords),
+            self.scrape_bitcointalk(coin, keywords),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -240,6 +263,7 @@ class LayerBScraper:
             try:
                 # Import here to avoid circular dependency
                 from api.event_store import get_active_coins
+                from shared.coin_metadata import get_sentiment_keywords
 
                 active_coins = get_active_coins()
 
@@ -247,7 +271,9 @@ class LayerBScraper:
                     logger.info(f"Layer B scraping {len(active_coins)} coins: {active_coins}")
                     print(f"Layer B scraping {len(active_coins)} coins: {active_coins}")
                     for coin in active_coins:
-                        await self.scrape_all_sources(coin)
+                        # Get keywords for multi-keyword matching
+                        keywords = get_sentiment_keywords(coin)
+                        await self.scrape_all_sources(coin, keywords)
                         await asyncio.sleep(2)  # Small delay between coins
 
                     # Wait for next polling interval after scraping

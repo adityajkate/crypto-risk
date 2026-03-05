@@ -1,4 +1,5 @@
 """In-memory event store for real-time sentiment tracking."""
+
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Set
@@ -47,8 +48,8 @@ def initialize_coin(coin: str):
                 "weighted_event_score": 0.0,
                 "layer_a_weight": 0.0,
                 "layer_b_weight": 0.0,
-                "recency_decay_applied": True
-            }
+                "recency_decay_applied": True,
+            },
         }
 
 
@@ -83,11 +84,15 @@ def calculate_event_score(cluster_data: Dict[str, Any]) -> float:
 
     # Calculate recency weight (exponential decay)
     timestamps = [m["timestamp"] for m in members]
-    avg_age_minutes = sum((now - ts).total_seconds() / 60 for ts in timestamps) / len(timestamps)
+    avg_age_minutes = sum((now - ts).total_seconds() / 60 for ts in timestamps) / len(
+        timestamps
+    )
     recency_weight = np.exp(-avg_age_minutes / 60.0)  # Decay over 1 hour
 
     # Final event score
-    event_score = (mention_velocity * platform_diversity * avg_engagement) * recency_weight
+    event_score = (
+        mention_velocity * platform_diversity * avg_engagement
+    ) * recency_weight
 
     return float(event_score)
 
@@ -118,8 +123,7 @@ def prune_stale_data(coin: str, max_age_minutes: int = 180):
     for cluster_id, cluster_data in clusters.items():
         # Filter out stale members
         cluster_data["members"] = [
-            m for m in cluster_data["members"]
-            if m["timestamp"] > cutoff_time
+            m for m in cluster_data["members"] if m["timestamp"] > cutoff_time
         ]
 
         # If cluster is empty, mark for removal
@@ -128,7 +132,9 @@ def prune_stale_data(coin: str, max_age_minutes: int = 180):
         else:
             # Recalculate cluster metrics
             cluster_data["event_score"] = calculate_event_score(cluster_data)
-            cluster_data["mention_velocity"] = calculate_mention_velocity(cluster_data["members"])
+            cluster_data["mention_velocity"] = calculate_mention_velocity(
+                cluster_data["members"]
+            )
 
     # Remove empty clusters
     for cluster_id in clusters_to_remove:
@@ -151,7 +157,7 @@ def update_global_metrics(coin: str):
             "weighted_event_score": 0.0,
             "layer_a_weight": 0.0,
             "layer_b_weight": 0.0,
-            "recency_decay_applied": True
+            "recency_decay_applied": True,
         }
         return
 
@@ -189,7 +195,7 @@ def update_global_metrics(coin: str):
         "weighted_event_score": float(total_event_score),
         "layer_a_weight": float(layer_a_contribution),
         "layer_b_weight": float(layer_b_contribution),
-        "recency_decay_applied": True
+        "recency_decay_applied": True,
     }
 
     EVENT_STORE[coin]["last_updated"] = datetime.utcnow()
@@ -210,19 +216,27 @@ def get_cluster_summary(coin: str) -> List[Dict[str, Any]]:
         source_counts = defaultdict(int)
         for m in members:
             source_counts[m["source"]] += 1
-        top_sources = sorted(source_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_sources = sorted(source_counts.items(), key=lambda x: x[1], reverse=True)[
+            :3
+        ]
 
         # Calculate average credibility weight
-        avg_credibility = sum(m["credibility_weight"] for m in members) / len(members) if members else 0
+        avg_credibility = (
+            sum(m["credibility_weight"] for m in members) / len(members)
+            if members
+            else 0
+        )
 
-        summaries.append({
-            "cluster_id": cluster_id,
-            "event_score": cluster_data["event_score"],
-            "mention_velocity": cluster_data["mention_velocity"],
-            "member_count": len(members),
-            "top_sources": [s[0] for s in top_sources],
-            "credibility_weight_avg": float(avg_credibility)
-        })
+        summaries.append(
+            {
+                "cluster_id": cluster_id,
+                "event_score": cluster_data["event_score"],
+                "mention_velocity": cluster_data["mention_velocity"],
+                "member_count": len(members),
+                "top_sources": [s[0] for s in top_sources],
+                "credibility_weight_avg": float(avg_credibility),
+            }
+        )
 
     return summaries
 
@@ -254,7 +268,8 @@ def get_raw_articles(coin: str, limit: int = 100) -> List[Dict[str, Any]]:
             "timestamp": m["timestamp"].isoformat(),
             "url": m["url"],
             "platform_id": m["platform_id"],
-            "engagement_count": m["engagement_count"]
+            "engagement_count": m["engagement_count"],
+            "image_url": m.get("image_url"),  # Include image URL
         }
         for m in all_members[:limit]
     ]
@@ -281,7 +296,8 @@ def get_article_by_id(coin: str, article_id: str) -> Optional[Dict[str, Any]]:
                     "timestamp": member["timestamp"].isoformat(),
                     "url": member["url"],
                     "platform_id": member["platform_id"],
-                    "engagement_count": member["engagement_count"]
+                    "engagement_count": member["engagement_count"],
+                    "image_url": member.get("image_url"),  # Include image URL
                 }
 
     return None

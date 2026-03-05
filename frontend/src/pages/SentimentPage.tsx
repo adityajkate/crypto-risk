@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MessageSquare, Twitter, Globe, TrendingUp, AlertCircle, Info, X, ExternalLink, Clock, ThumbsUp, FileText, Sparkles } from 'lucide-react';
 import { useCrypto } from '../context/CryptoContext';
+import { apiClient } from '../services/apiClient';
 
 interface Article {
   id: string;
@@ -56,33 +57,30 @@ const SentimentPage: React.FC = () => {
   const [loadingSummary, setLoadingSummary] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchSentimentData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const API_BASE = 'http://localhost:8000';
-
         // Fetch sentiment metrics
-        const metricsResponse = await fetch(`${API_BASE}/api/v1/sentiment/${coinId}`);
-        if (metricsResponse.ok) {
-          const metricsData: { data: SentimentResponse } = await metricsResponse.json();
-          setSentimentMetrics(metricsData.data.global_metrics);
-        }
+        const metricsData = await apiClient.getSentiment(coinId, controller.signal);
+        setSentimentMetrics(metricsData.global_metrics);
 
         // Fetch raw articles
-        const articlesResponse = await fetch(`${API_BASE}/api/v1/sentiment/${coinId}/raw?limit=100`);
-        if (articlesResponse.ok) {
-          const articlesData: { data: { articles: Article[], status: string } } = await articlesResponse.json();
-          setArticles(articlesData.data.articles);
+        const articlesData = await apiClient.getSentimentRaw(coinId, 100, controller.signal);
+        setArticles(articlesData.articles);
 
-          // If no articles yet, show info message instead of error
-          if (articlesData.data.articles.length === 0) {
-            setError(null); // Clear any previous errors
-          }
+        // If no articles yet, show info message instead of error
+        if (articlesData.articles.length === 0) {
+          setError(null); // Clear any previous errors
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch sentiment data');
-        console.error('Error fetching sentiment:', err);
+      } catch (err: any) {
+        // Don't show error if request was cancelled
+        if (err?.isAborted !== true && err?.name !== 'AbortError') {
+          setError(err?.userMessage || err?.message || 'Failed to fetch sentiment data');
+          console.error('Error fetching sentiment:', err);
+        }
       } finally {
         setLoading(false);
       }
@@ -92,7 +90,10 @@ const SentimentPage: React.FC = () => {
 
     // Refresh every 30 seconds
     const interval = setInterval(fetchSentimentData, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
   }, [coinId]);
 
   const handleArticleClick = (article: Article) => {
@@ -108,13 +109,9 @@ const SentimentPage: React.FC = () => {
   const handleGenerateSummary = async () => {
     setLoadingSummary(true);
     try {
-      const API_BASE = 'http://localhost:8000';
-      const response = await fetch(`${API_BASE}/api/v1/sentiment/${coinId}/summary`);
-      if (response.ok) {
-        const data: { data: SummaryData } = await response.json();
-        setSummaryData(data.data);
-        setShowSummary(true);
-      }
+      const data = await apiClient.getSentimentSummary(coinId);
+      setSummaryData(data);
+      setShowSummary(true);
     } catch (err) {
       console.error('Error fetching summary:', err);
     } finally {
@@ -159,7 +156,7 @@ const SentimentPage: React.FC = () => {
   const getProxiedImageUrl = (imageUrl: string | undefined) => {
     if (!imageUrl) return null;
     // Use backend proxy to avoid CORS issues
-    return `http://localhost:8000/api/v1/proxy/image?url=${encodeURIComponent(imageUrl)}`;
+    return apiClient.getImageProxyUrl(imageUrl);
   };
 
   if (loading || contextLoading) {

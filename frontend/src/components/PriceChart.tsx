@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Area, AreaChart } from 'recharts';
 import { TrendingUp, BarChart3, Activity } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
 
 interface ChartData {
   time: string;
@@ -14,11 +15,74 @@ interface ChartData {
 
 interface PriceChartProps {
   coinId: string;
-  timeframe: '1H' | '24H' | '7D' | '1M';
   currentPrice: number;
 }
 
 type ChartType = 'line' | 'candlestick' | 'live';
+
+// Custom Candlestick Tooltip
+const CandlestickTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length > 0) {
+    const data = payload[0].payload;
+
+    if (!data || !data.timestamp) return null;
+
+    const date = new Date(data.timestamp);
+    const dateStr = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }) + ' ' + date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+
+    const formatPrice = (price: number) => {
+      if (!price) return 'N/A';
+      return price >= 1 ? `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${price.toFixed(6)}`;
+    };
+
+    return (
+      <div style={{
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
+        padding: '12px 16px',
+        minWidth: '200px'
+      }}>
+        <p style={{
+          color: '#0f172a',
+          fontWeight: 600,
+          marginBottom: '8px',
+          fontSize: '13px',
+          borderBottom: '1px solid #e2e8f0',
+          paddingBottom: '6px'
+        }}>{dateStr}</p>
+        <div style={{ fontSize: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', padding: '4px 0' }}>
+            <span style={{ color: '#64748b' }}>Open:</span>
+            <span style={{ color: '#0f172a', fontWeight: 600, fontFamily: 'monospace' }}>{formatPrice(data.open)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', padding: '4px 0' }}>
+            <span style={{ color: '#64748b' }}>High:</span>
+            <span style={{ color: '#10b981', fontWeight: 600, fontFamily: 'monospace' }}>{formatPrice(data.high)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', padding: '4px 0' }}>
+            <span style={{ color: '#64748b' }}>Low:</span>
+            <span style={{ color: '#ef4444', fontWeight: 600, fontFamily: 'monospace' }}>{formatPrice(data.low)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', padding: '4px 0' }}>
+            <span style={{ color: '#64748b' }}>Close:</span>
+            <span style={{ color: '#0f172a', fontWeight: 600, fontFamily: 'monospace' }}>{formatPrice(data.close)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 // Generate human-readable Y-axis ticks
 const generateYAxisTicks = (data: ChartData[]): number[] => {
@@ -60,7 +124,7 @@ const generateYAxisTicks = (data: ChartData[]): number[] => {
   return ticks;
 };
 
-const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice }) => {
+const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
   const [chartType, setChartType] = useState<ChartType>('line');
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [liveData, setLiveData] = useState<ChartData[]>([]);
@@ -68,6 +132,8 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
 
   // Fetch real OHLC data from backend
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchOHLCData = async () => {
       setLoading(true);
       try {
@@ -76,44 +142,40 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
           return;
         }
 
-        let days = 1;
-        switch (timeframe) {
-          case '1H': days = 1; break;
-          case '24H': days = 1; break;
-          case '7D': days = 7; break;
-          case '1M': days = 30; break;
+        // Fixed 7-day timeframe with 4-hour candles
+        const days = 7;
+        const result = await apiClient.getOHLC(coinId, days, controller.signal);
+
+        if (result && Array.isArray(result.ohlc) && result.ohlc.length > 0) {
+          // Show all 7-day data (42 candles with 4-hour intervals)
+          const filteredData = result.ohlc;
+
+          // Format time labels: Show date only (Feb 26) for cleaner x-axis
+          const formatted = filteredData.map((item: any) => {
+            const date = new Date(item.timestamp);
+            const timeLabel = date.toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric'
+            });
+
+            return {
+              time: timeLabel,
+              timestamp: item.timestamp,
+              open: item.open,
+              high: item.high,
+              low: item.low,
+              close: item.close,
+              price: item.close
+            };
+          });
+
+          setChartData(formatted);
         }
-
-        const response = await fetch(`/api/v1/coin/${coinId}/ohlc?days=${days}`);
-        const result = await response.json();
-
-        if (result.success && Array.isArray(result.data.ohlc)) {
-          const formatted = result.data.ohlc.map((item: any) => ({
-            time: new Date(item.timestamp).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false
-            }),
-            timestamp: item.timestamp,
-            open: item.open,
-            high: item.high,
-            low: item.low,
-            close: item.close,
-            price: item.close
-          }));
-
-          // Filter based on timeframe
-          let filtered = formatted;
-          if (timeframe === '1H') {
-            filtered = formatted.slice(-12);
-          } else if (timeframe === '24H') {
-            filtered = formatted.slice(-24);
-          }
-
-          setChartData(filtered);
+      } catch (error: any) {
+        // Don't show error if request was cancelled
+        if (error?.isAborted !== true && error?.name !== 'AbortError') {
+          console.error('Failed to fetch OHLC data:', error?.userMessage || error?.message || error);
         }
-      } catch (error) {
-        console.error('Failed to fetch OHLC data:', error);
       } finally {
         setLoading(false);
       }
@@ -122,256 +184,341 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, timeframe, currentPrice
     if (chartType === 'candlestick' || chartType === 'line') {
       fetchOHLCData();
     }
-  }, [coinId, timeframe, chartType, currentPrice]);
 
-  // Live chart simulation
+    return () => {
+      controller.abort();
+    };
+  }, [coinId, chartType, currentPrice]);
+
+  // Live chart - poll real price from backend
   useEffect(() => {
     if (chartType !== 'live') return;
 
     const initialData: ChartData[] = Array.from({ length: 30 }, (_, i) => ({
       time: `${i}s`,
-      price: currentPrice + (Math.random() - 0.5) * currentPrice * 0.001
+      price: currentPrice
     }));
     setLiveData(initialData);
 
-    const interval = setInterval(() => {
-      setLiveData(prev => {
-        const newData = [...prev.slice(1)];
-        const lastPrice = prev[prev.length - 1].price || currentPrice;
-        const change = (Math.random() - 0.5) * currentPrice * 0.0005;
+    const interval = setInterval(async () => {
+      try {
+        const result = await apiClient.getCoinPrice(coinId);
 
-        newData.push({
-          time: new Date().toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          }),
-          price: lastPrice + change
-        });
+        if (result && result.current_price) {
+          const newPrice = result.current_price;
 
-        return newData;
-      });
-    }, 1000);
+          setLiveData(prev => {
+            const newData = [...prev.slice(1)];
+            newData.push({
+              time: new Date().toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+              }),
+              price: newPrice
+            });
+            return newData;
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch live price:', error);
+      }
+    }, 10000); // Poll every 10 seconds for live chart
 
     return () => clearInterval(interval);
-  }, [chartType, currentPrice]);
+  }, [chartType, currentPrice, coinId]);
 
-  const renderCandlestick = (data: ChartData[]) => (
-    <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" strokeOpacity={0.3} vertical={false} />
-        <XAxis
-          dataKey="time"
-          stroke="#64748b"
-          fontSize={12}
-          tickLine={false}
-          axisLine={{ stroke: '#e2e8f0' }}
-          interval="preserveStartEnd"
-          minTickGap={50}
-          domain={['dataMin', 'dataMax']}
-        />
-        <YAxis
-          stroke="#64748b"
-          fontSize={12}
-          tickLine={false}
-          axisLine={{ stroke: '#e2e8f0' }}
-          domain={['dataMin - 100', 'dataMax + 100']}
-          tickFormatter={(v) => {
-            if (v >= 1000000) return `$${(v/1000000).toFixed(1)}M`;
-            if (v >= 1000) return `$${(v/1000).toFixed(1)}K`;
-            return `$${v.toFixed(0)}`;
-          }}
-          width={60}
-          ticks={generateYAxisTicks(data)}
-        />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: '#ffffff',
-            borderColor: '#e5e7eb',
-            borderRadius: '8px',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.03)'
-          }}
-          formatter={(value: number, name: string) => {
-            if (name === 'open') return [`$${value.toFixed(2)}`, 'Open'];
-            if (name === 'high') return [`$${value.toFixed(2)}`, 'High'];
-            if (name === 'low') return [`$${value.toFixed(2)}`, 'Low'];
-            if (name === 'close') return [`$${value.toFixed(2)}`, 'Close'];
-            return [`$${value.toFixed(2)}`, name];
-          }}
-          labelFormatter={(label) => `Time: ${label}`}
-        />
-        <Bar
-          dataKey="high"
-          fill="transparent"
-          shape={(props: any) => {
-            const { x, y, width, payload } = props;
-            if (!payload.open || !payload.close || !payload.high || !payload.low) return null;
+  const renderCandlestick = (data: ChartData[]) => {
+    if (!data || data.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-full text-slate-500">
+          No data available for this timeframe
+        </div>
+      );
+    }
 
-            const isGreen = payload.close >= payload.open;
-            const color = isGreen ? '#10b981' : '#ef4444';
-            const bodyHeight = Math.abs(payload.close - payload.open);
-            const bodyY = Math.min(payload.close, payload.open);
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 20, right: 40, left: 10, bottom: 20 }}>
+          <defs>
+            <linearGradient id="gridGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f1f5f9" stopOpacity={0.8}/>
+              <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0.2}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="url(#gridGradient)"
+            vertical={false}
+            strokeWidth={1}
+          />
+          <XAxis
+            dataKey="time"
+            stroke="#94a3b8"
+            fontSize={11}
+            tickLine={false}
+            axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
+            height={50}
+            interval="preserveStartEnd"
+            tick={{ fill: '#64748b', fontWeight: 500 }}
+          />
+          <YAxis
+            stroke="#94a3b8"
+            fontSize={11}
+            tickLine={false}
+            axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
+            domain={['auto', 'auto']}
+            tickFormatter={(v) => {
+              if (v >= 1000000) return `$${(v/1000000).toFixed(2)}M`;
+              if (v >= 1000) return `$${(v/1000).toFixed(1)}K`;
+              if (v >= 1) return `$${v.toFixed(2)}`;
+              return `$${v.toFixed(4)}`;
+            }}
+            width={85}
+            tick={{ fill: '#64748b', fontWeight: 500 }}
+          />
+          <Tooltip content={<CandlestickTooltip />} />
+          <Bar
+            dataKey="high"
+            fill="transparent"
+            shape={(props: any) => {
+              const { x, y, width, payload, height } = props;
+              if (!payload.open || !payload.close || !payload.high || !payload.low) return null;
 
-            // Scale factors
-            const priceRange = Math.max(...data.map(d => d.high || 0)) - Math.min(...data.map(d => d.low || 0));
-            const chartHeight = 350;
-            const scale = chartHeight / priceRange;
+              const isGreen = payload.close >= payload.open;
+              const color = isGreen ? '#10b981' : '#ef4444';
 
-            const wickX = x + width / 2;
-            const candleWidth = Math.max(width * 0.6, 2);
+              // Get chart dimensions
+              const yScale = height / (Math.max(...data.map(d => d.high || 0)) - Math.min(...data.map(d => d.low || 0)));
 
-            return (
-              <g>
-                {/* Wick */}
-                <line
-                  x1={wickX}
-                  y1={y}
-                  x2={wickX}
-                  y2={y + (payload.high - payload.low) * scale}
-                  stroke={color}
-                  strokeWidth={1}
-                />
-                {/* Body */}
-                <rect
-                  x={x + (width - candleWidth) / 2}
-                  y={y + (payload.high - Math.max(payload.open, payload.close)) * scale}
-                  width={candleWidth}
-                  height={Math.max(bodyHeight * scale, 1)}
-                  fill={color}
-                  stroke={color}
-                />
-              </g>
-            );
-          }}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
-  );
+              const wickX = x + width / 2;
+              const candleWidth = Math.max(Math.min(width * 0.7, 14), 4);
 
-  const renderLineChart = (data: ChartData[]) => (
-    <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-        <defs>
-          <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#0f766e" stopOpacity={0.15}/>
-            <stop offset="95%" stopColor="#0f766e" stopOpacity={0}/>
-          </linearGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" strokeOpacity={0.3} vertical={false} />
-        <XAxis
-          dataKey="time"
-          stroke="#64748b"
-          fontSize={12}
-          tickLine={false}
-          axisLine={{ stroke: '#e2e8f0' }}
-          interval="preserveStartEnd"
-          minTickGap={50}
-          domain={['dataMin', 'dataMax']}
-        />
-        <YAxis
-          stroke="#64748b"
-          fontSize={12}
-          tickLine={false}
-          axisLine={{ stroke: '#e2e8f0' }}
-          domain={['dataMin - 100', 'dataMax + 100']}
-          tickFormatter={(v) => {
-            if (v >= 1000000) return `$${(v/1000000).toFixed(1)}M`;
-            if (v >= 1000) return `$${(v/1000).toFixed(1)}K`;
-            return `$${v.toFixed(0)}`;
-          }}
-          width={60}
-          ticks={generateYAxisTicks(data)}
-        />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: '#ffffff',
-            borderColor: '#e5e7eb',
-            borderRadius: '8px',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.03)'
-          }}
-          itemStyle={{ color: '#0f172a' }}
-          labelStyle={{ color: '#64748b', fontWeight: 600 }}
-          formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
-        />
-        <Area
-          type="monotone"
-          dataKey="price"
-          stroke="#0f766e"
-          strokeWidth={1.25}
-          fillOpacity={1}
-          fill="url(#colorPrice)"
-          filter="url(#glow)"
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
+              // Calculate positions
+              const highY = y;
+              const lowY = y + (payload.high - payload.low) * yScale;
+              const openY = y + (payload.high - payload.open) * yScale;
+              const closeY = y + (payload.high - payload.close) * yScale;
+              const bodyTop = Math.min(openY, closeY);
+              const bodyHeight = Math.max(Math.abs(closeY - openY), 2);
+
+              return (
+                <g>
+                  {/* Wick with shadow */}
+                  <line
+                    x1={wickX}
+                    y1={highY}
+                    x2={wickX}
+                    y2={lowY}
+                    stroke={color}
+                    strokeWidth={2}
+                    opacity={0.9}
+                  />
+                  {/* Body with gradient */}
+                  <defs>
+                    <linearGradient id={`candle-${x}-${isGreen ? 'green' : 'red'}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={1}/>
+                      <stop offset="100%" stopColor={color} stopOpacity={0.8}/>
+                    </linearGradient>
+                  </defs>
+                  <rect
+                    x={x + (width - candleWidth) / 2}
+                    y={bodyTop}
+                    width={candleWidth}
+                    height={bodyHeight}
+                    fill={`url(#candle-${x}-${isGreen ? 'green' : 'red'})`}
+                    stroke={color}
+                    strokeWidth={1.5}
+                    rx={2}
+                  />
+                </g>
+              );
+            }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
+  };
+
+  const renderLineChart = (data: ChartData[]) => {
+    if (!data || data.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-full text-slate-500">
+          No data available for this timeframe
+        </div>
+      );
+    }
+
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 20, right: 40, left: 10, bottom: 20 }}>
+          <defs>
+            <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#0d9488" stopOpacity={0.3}/>
+              <stop offset="50%" stopColor="#14b8a6" stopOpacity={0.15}/>
+              <stop offset="95%" stopColor="#5eead4" stopOpacity={0}/>
+            </linearGradient>
+            <linearGradient id="gridGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f1f5f9" stopOpacity={0.8}/>
+              <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0.2}/>
+            </linearGradient>
+            <filter id="shadow">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0d9488" floodOpacity="0.3"/>
+            </filter>
+          </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="url(#gridGradient)"
+            vertical={false}
+            strokeWidth={1}
+          />
+          <XAxis
+            dataKey="time"
+            stroke="#94a3b8"
+            fontSize={11}
+            tickLine={false}
+            axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
+            height={50}
+            interval="preserveStartEnd"
+            tick={{ fill: '#64748b', fontWeight: 500 }}
+          />
+          <YAxis
+            stroke="#94a3b8"
+            fontSize={11}
+            tickLine={false}
+            axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
+            domain={['auto', 'auto']}
+            tickFormatter={(v) => {
+              if (v >= 1000000) return `$${(v/1000000).toFixed(2)}M`;
+              if (v >= 1000) return `$${(v/1000).toFixed(1)}K`;
+              if (v >= 1) return `$${v.toFixed(2)}`;
+              return `$${v.toFixed(4)}`;
+            }}
+            width={85}
+            tick={{ fill: '#64748b', fontWeight: 500 }}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'rgba(255, 255, 255, 0.98)',
+              borderColor: '#14b8a6',
+              borderRadius: '12px',
+              boxShadow: '0 10px 40px rgba(13, 148, 136, 0.15)',
+              padding: '12px 16px',
+              border: '1px solid #99f6e4'
+            }}
+            itemStyle={{ color: '#0f172a', fontSize: '12px', fontWeight: 500 }}
+            labelStyle={{ color: '#0f172a', fontWeight: 600, marginBottom: '8px', fontSize: '13px' }}
+            formatter={(value: number) => {
+              const formatted = value >= 1 ? `$${value.toFixed(2)}` : `$${value.toFixed(6)}`;
+              return [formatted, 'Price'];
+            }}
+          />
+          <Area
+            type="monotone"
+            dataKey="price"
+            stroke="#0d9488"
+            strokeWidth={2.5}
+            fillOpacity={1}
+            fill="url(#colorPrice)"
+            dot={false}
+            filter="url(#shadow)"
+            animationDuration={800}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    );
+  };
 
   const renderLiveChart = () => (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={liveData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+      <AreaChart data={liveData} margin={{ top: 20, right: 40, left: 10, bottom: 30 }}>
         <defs>
           <linearGradient id="colorLive" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+            <stop offset="50%" stopColor="#34d399" stopOpacity={0.2}/>
+            <stop offset="95%" stopColor="#6ee7b7" stopOpacity={0}/>
+          </linearGradient>
+          <linearGradient id="gridGradientLive" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f1f5f9" stopOpacity={0.8}/>
+            <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0.2}/>
+          </linearGradient>
+          <filter id="liveShadow">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#10b981" floodOpacity="0.4"/>
+          </filter>
+          <linearGradient id="pulseGradient" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#10b981" stopOpacity={0.8}>
+              <animate attributeName="stop-opacity" values="0.8;1;0.8" dur="2s" repeatCount="indefinite"/>
+            </stop>
+            <stop offset="100%" stopColor="#34d399" stopOpacity={1}>
+              <animate attributeName="stop-opacity" values="1;0.8;1" dur="2s" repeatCount="indefinite"/>
+            </stop>
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+        <CartesianGrid
+          strokeDasharray="3 3"
+          stroke="url(#gridGradientLive)"
+          vertical={false}
+          strokeWidth={1}
+        />
         <XAxis
           dataKey="time"
-          stroke="#64748b"
+          stroke="#94a3b8"
           fontSize={11}
           tickLine={false}
-          axisLine={{ stroke: '#e2e8f0' }}
+          axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
           interval="preserveEnd"
-          minTickGap={80}
+          minTickGap={60}
+          tick={{ fill: '#64748b', fontWeight: 500 }}
         />
         <YAxis
-          stroke="#64748b"
+          stroke="#94a3b8"
           fontSize={11}
           tickLine={false}
-          axisLine={{ stroke: '#e2e8f0' }}
-          domain={['dataMin - 10', 'dataMax + 10']}
+          axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
+          domain={['auto', 'auto']}
           tickFormatter={(v) => {
-            if (v >= 1000000) return `$${(v/1000000).toFixed(1)}M`;
+            if (v >= 1000000) return `$${(v/1000000).toFixed(2)}M`;
             if (v >= 1000) return `$${(v/1000).toFixed(1)}K`;
-            return `$${v.toFixed(0)}`;
+            if (v >= 1) return `$${v.toFixed(2)}`;
+            return `$${v.toFixed(4)}`;
           }}
-          width={60}
+          width={85}
+          tick={{ fill: '#64748b', fontWeight: 500 }}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: '#ffffff',
-            borderColor: '#e2e8f0',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+            backgroundColor: 'rgba(255, 255, 255, 0.98)',
+            borderColor: '#10b981',
+            borderRadius: '12px',
+            boxShadow: '0 10px 40px rgba(16, 185, 129, 0.2)',
+            padding: '12px 16px',
+            border: '1px solid #a7f3d0'
           }}
-          itemStyle={{ color: '#0f172a' }}
-          labelStyle={{ color: '#64748b', fontWeight: 600 }}
-          formatter={(value: number) => [`$${value.toFixed(2)}`, 'Live Price']}
+          itemStyle={{ color: '#0f172a', fontSize: '12px', fontWeight: 500 }}
+          labelStyle={{ color: '#0f172a', fontWeight: 600, marginBottom: '8px', fontSize: '13px' }}
+          formatter={(value: number) => {
+            const formatted = value >= 1 ? `$${value.toFixed(2)}` : `$${value.toFixed(6)}`;
+            return [formatted, 'Live Price'];
+          }}
         />
         <Area
           type="monotone"
           dataKey="price"
-          stroke="#10b981"
-          strokeWidth={2}
+          stroke="url(#pulseGradient)"
+          strokeWidth={3}
           fillOpacity={1}
           fill="url(#colorLive)"
           isAnimationActive={false}
+          filter="url(#liveShadow)"
+          dot={false}
         />
       </AreaChart>
     </ResponsiveContainer>
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex gap-2">
         <button
           onClick={() => setChartType('line')}

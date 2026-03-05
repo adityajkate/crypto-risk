@@ -9,6 +9,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _safe_print(message: str):
+    """Print safely on terminals with non-UTF-8 encodings (e.g., Windows cp1252)."""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        print(message.encode("ascii", errors="replace").decode("ascii"))
+
+
 class LayerAScraper:
     """Scraper for authoritative crypto news sources."""
 
@@ -17,20 +25,34 @@ class LayerAScraper:
         "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "cointelegraph": "https://cointelegraph.com/rss",
         "decrypt": "https://decrypt.co/feed",
-        "theblock": "https://www.theblock.co/rss.xml",
-        "bitcoinmagazine": "https://bitcoinmagazine.com/.rss/full/",
+        "bitcoinmagazine": "https://bitcoinmagazine.com/feed",
+        "cryptoslate": "https://cryptoslate.com/feed/",
+        "newsbtc": "https://www.newsbtc.com/feed/",
+        "blockworks": "https://blockworks.co/feed",
+        "dailyhodl": "https://dailyhodl.com/feed/",
     }
 
     # Official blog feeds
     BLOG_FEEDS = {
         "binance": "https://www.binance.com/en/blog/rss.xml",
-        "coinbase": "https://blog.coinbase.com/feed",
         "ethereum": "https://blog.ethereum.org/feed.xml",
     }
 
     def __init__(self, scrape_queue: asyncio.Queue = None):
         self.scrape_queue = scrape_queue  # Keep for compatibility, but will use event_store
-        self.client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36"
+                ),
+                "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, text/html;q=0.8, */*;q=0.7",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+        )
         self.running = False
 
     async def fetch_full_article(self, url: str) -> tuple:
@@ -122,22 +144,45 @@ class LayerAScraper:
             logger.warning(f"Could not fetch full article from {url}: {e}")
             return ("", None)
 
-    async def scrape_rss_feed(self, source: str, url: str, coin: str) -> List[Dict[str, Any]]:
-        """Scrape a single RSS feed."""
+    async def scrape_rss_feed(self, source: str, url: str, coin: str, keywords: List[str] = None) -> List[Dict[str, Any]]:
+        """Scrape a single RSS feed.
+
+        Args:
+            source: Source name
+            url: RSS feed URL
+            coin: Primary coin identifier (for storage)
+            keywords: List of keywords to match (name, symbol, aliases)
+        """
+        if keywords is None:
+            keywords = [coin]
+
         try:
+            logger.info(f"[{source}] Fetching RSS feed: {url}")
+            _safe_print(f"[{source}] Fetching RSS feed for {coin} with keywords: {keywords}")
+
             response = await self.client.get(url)
             response.raise_for_status()
 
             feed = feedparser.parse(response.text)
             articles = []
 
+            total_entries = len(feed.entries)
+            logger.info(f"[{source}] Found {total_entries} entries in feed")
+            _safe_print(f"[{source}] Found {total_entries} entries, checking for matches...")
+
+            matches_found = 0
             for entry in feed.entries[:20]:  # Limit to 20 most recent
-                # Check if article mentions the coin
+                # Check if article mentions any of the coin keywords
                 title = entry.get("title", "")
                 summary = entry.get("summary", entry.get("description", ""))
-                text = f"{title}. {summary}"
+                text = f"{title}. {summary}".lower()
 
-                if coin.lower() in text.lower():
+                # Match against any keyword
+                if any(keyword.lower() in text for keyword in keywords):
+                    matches_found += 1
+                    logger.info(f"[{source}] MATCH FOUND: {title[:80]}")
+                    _safe_print(f"[{source}] [OK] Match: {title[:80]}")
+
                     article_url = entry.get("link", "")
 
                     # Try to get image from RSS feed first
@@ -175,24 +220,36 @@ class LayerAScraper:
                         "credibility_weight": 0.6  # Layer A weight
                     })
 
+            logger.info(f"[{source}] Scraped {len(articles)} articles for {coin} (matched {matches_found}/{total_entries})")
+            _safe_print(f"[{source}] [OK] Scraped {len(articles)} articles for {coin}")
             return articles
 
         except Exception as e:
-            logger.error(f"Error scraping {source} RSS: {e}")
+            logger.error(f"[{source}] Error scraping RSS: {e}")
+            _safe_print(f"[{source}] [ERROR] Error: {e}")
             return []
 
-    async def scrape_all_feeds(self, coin: str):
-        """Scrape all RSS and blog feeds for a coin."""
+    async def scrape_all_feeds(self, coin: str, keywords: List[str] = None):
+        """Scrape all RSS and blog feeds for a coin.
+
+        Args:
+            coin: Primary coin identifier (for storage)
+            keywords: List of keywords to match (name, symbol, aliases)
+        """
+        if keywords is None:
+            keywords = [coin]
+
         all_feeds = {**self.RSS_FEEDS, **self.BLOG_FEEDS}
 
         tasks = [
-            self.scrape_rss_feed(source, url, coin)
+            self.scrape_rss_feed(source, url, coin, keywords)
             for source, url in all_feeds.items()
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Flatten results and push to queue
+        total_articles = 0
         for result in results:
             if isinstance(result, list):
                 for article in result:
@@ -201,10 +258,18 @@ class LayerAScraper:
                         from api.event_store import SCRAPE_QUEUE
                         if SCRAPE_QUEUE:
                             await SCRAPE_QUEUE.put(article)
+                            total_articles += 1
                         else:
                             logger.warning("SCRAPE_QUEUE not initialized")
                     except asyncio.QueueFull:
                         logger.warning("Scrape queue full, dropping article")
+
+        if total_articles > 0:
+            _safe_print(f"[Layer A] [OK] Pushed {total_articles} articles to processing queue for {coin}")
+            logger.info(f"Pushed {total_articles} articles to queue for {coin}")
+        else:
+            _safe_print(f"[Layer A] No articles found for {coin}")
+            logger.info(f"No articles found for {coin}")
 
     async def run(self, coins: List[str], interval_minutes: int = 15):
         """
@@ -238,36 +303,44 @@ class LayerAScraper:
         """
         self.running = True
         logger.info("Layer A scraper started with dynamic coin tracking")
-        print("Layer A scraper started with dynamic coin tracking")  # Console output
+        _safe_print("=" * 60)
+        _safe_print("Layer A scraper started with dynamic coin tracking")
+        _safe_print("=" * 60)
 
         while self.running:
             try:
                 # Import here to avoid circular dependency
                 from api.event_store import get_active_coins
+                from shared.coin_metadata import get_sentiment_keywords
 
                 active_coins = get_active_coins()
 
                 if active_coins:
-                    logger.info(f"Layer A scraping {len(active_coins)} coins: {active_coins}")
-                    print(f"Layer A scraping {len(active_coins)} coins: {active_coins}")
-                    for coin in active_coins:
-                        await self.scrape_all_feeds(coin)
-                        await asyncio.sleep(2)  # Small delay between coins
+                    logger.info(f"Layer A scraping {len(active_coins)} active coins")
+                    _safe_print(f"\n[Layer A] Scraping {len(active_coins)} coins: {active_coins}")
 
-                    # Wait for next polling interval after scraping
-                    logger.info(f"Layer A: Waiting {interval_minutes} minutes until next scrape")
-                    print(f"Layer A: Waiting {interval_minutes} minutes until next scrape")
-                    await asyncio.sleep(interval_minutes * 60)
+                    for coin in active_coins:
+                        # Get keywords for multi-keyword matching
+                        keywords = get_sentiment_keywords(coin)
+                        _safe_print(f"\n[Layer A] Processing {coin} with keywords: {keywords}")
+                        await self.scrape_all_feeds(coin, keywords)
+                        await asyncio.sleep(2)  # Small delay between coins
                 else:
-                    # No coins yet, check again in 30 seconds
-                    logger.debug("No active coins to scrape")
-                    print("Layer A: No active coins to scrape yet, checking again in 30s")
+                    logger.info("No active coins to scrape yet")
+                    _safe_print("[Layer A] No active coins to scrape yet")
                     await asyncio.sleep(30)
+                    continue
+
+                # Wait for next polling interval only after an active scrape cycle
+                _safe_print(f"\n[Layer A] Waiting {interval_minutes} minutes until next scrape...")
+                await asyncio.sleep(interval_minutes * 60)
 
             except Exception as e:
-                logger.error(f"Error in Layer A scraper: {e}")
-                print(f"Error in Layer A scraper: {e}")
+                logger.error(f"Error in Layer A dynamic scraper: {e}")
+                _safe_print(f"[Layer A] ERROR: {e}")
                 await asyncio.sleep(60)  # Wait 1 minute on error
+
+        logger.info("Layer A scraper stopped")
 
     async def stop(self):
         """Stop the scraper."""

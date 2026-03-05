@@ -163,7 +163,11 @@ class ClusteringWorker:
         """Run the clustering worker continuously."""
         self.running = True
         logger.info("Clustering worker started")
+        print("=" * 60)
+        print("Clustering worker started and ready")
+        print("=" * 60)
 
+        processed_count = 0
         while self.running:
             try:
                 # Import queue from event_store to get initialized reference
@@ -179,6 +183,11 @@ class ClusteringWorker:
                     timeout=1.0
                 )
 
+                processed_count += 1
+                coin = item.get('coin', 'unknown')
+                source = item.get('source', 'unknown')
+                print(f"[Clustering Worker] Processing article #{processed_count} for {coin} from {source}")
+
                 # Process the item
                 await self.process_item(item)
 
@@ -187,6 +196,7 @@ class ClusteringWorker:
                 continue
             except Exception as e:
                 logger.error(f"Error in clustering worker: {e}")
+                print(f"[Clustering Worker] ERROR: {e}")
                 await asyncio.sleep(1)
 
     async def stop(self):
