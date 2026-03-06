@@ -77,6 +77,9 @@ class CoinGeckoRealtimeClient:
             "id": data.get("id"),
             "symbol": data.get("symbol"),
             "name": data.get("name"),
+            "image": data.get("image", {}).get("large")
+            or data.get("image", {}).get("small")
+            or data.get("image", {}).get("thumb"),
             "current_price": market_data.get("current_price", {}).get("usd"),
             "market_cap": market_data.get("market_cap", {}).get("usd"),
             "total_volume": market_data.get("total_volume", {}).get("usd"),

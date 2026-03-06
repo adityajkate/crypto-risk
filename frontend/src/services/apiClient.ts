@@ -24,6 +24,7 @@ export interface PriceData {
   id: string;
   symbol: string;
   name: string;
+  image?: string | null;
   current_price: number;
   market_cap: number;
   total_volume: number;
@@ -75,6 +76,7 @@ export interface CoinAnalysis {
     id: string;
     symbol: string;
     name: string;
+    image?: string | null;
     current_price: number;
     market_cap: number;
     total_volume: number;

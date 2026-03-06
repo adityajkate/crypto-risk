@@ -13,6 +13,7 @@ const Dashboard: React.FC = () => {
   const { currency, coinId, setCurrency, setCoinId, analysis, priceData: apiPriceData, loading, error } = useCrypto();
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const [hideLogo, setHideLogo] = useState(false);
 
   // Debug logging
   console.log('Dashboard render:', {
@@ -23,14 +24,15 @@ const Dashboard: React.FC = () => {
     analysis
   });
 
-  // Set coin logo with fallback
-  const coinLogo = logoError
-    ? `https://cryptologos.cc/logos/${currency.toLowerCase()}-${apiPriceData?.symbol || 'btc'}-logo.png`
-    : `https://assets.coincap.io/assets/icons/${coinId}@2x.png`;
+  // Prefer CoinGecko image from API; fallback to symbol-based icon CDN.
+  const symbol = apiPriceData?.symbol?.toLowerCase();
+  const fallbackLogo = symbol ? `https://assets.coincap.io/assets/icons/${symbol}@2x.png` : '';
+  const coinLogo = logoError ? fallbackLogo : (apiPriceData?.image || fallbackLogo);
 
   // Reset logo error when coin changes
   React.useEffect(() => {
     setLogoError(false);
+    setHideLogo(false);
   }, [coinId]);
 
   // Fetch technical indicators
@@ -125,12 +127,18 @@ const Dashboard: React.FC = () => {
     <div className="space-y-6">
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          {coinLogo && (
+          {coinLogo && !hideLogo && (
             <img
               src={coinLogo}
               alt={currency}
               className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-slate-200"
-              onError={() => setLogoError(true)}
+              onError={() => {
+                if (!logoError && fallbackLogo && coinLogo !== fallbackLogo) {
+                  setLogoError(true);
+                  return;
+                }
+                setHideLogo(true);
+              }}
             />
           )}
           <div>

@@ -2,9 +2,16 @@ import React, { useEffect, useRef, useState, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Shield, TrendingUp, Activity,
-  Layers, BarChart3, ChevronRight, Zap, PlayCircle, BarChart, Eye, Search, Database, Brain
+  Layers, BarChart3, ChevronRight, Zap, PlayCircle, BarChart, Eye, Search, Database, Brain,
+  FileText, Bell, Share2, Calendar
 } from 'lucide-react';
 import { DitheringShader } from '../components/ui/dithering-shader';
+import { GlobeDemo } from '../components/GlobeDemo';
+import TrueFocus from '../components/ui/TrueFocus';
+import RotatingText from '../components/ui/RotatingText';
+import Grainient from '../components/ui/Grainient';
+import GridScan from '../components/ui/GridScan';
+import { Highlighter } from '../components/ui/highlighter';
 
 /* --- UTILITIES --- */
 function useScrollPosition() {
@@ -173,23 +180,52 @@ const HeroSection: React.FC = () => {
   return (
     <section className="relative min-h-[100svh] flex flex-col justify-center items-center overflow-hidden px-6 pt-20">
 
-      {/* Floating Network Background */}
-      <div className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-hidden flex items-center justify-center">
-        <div className="w-[100vw] h-[100vw] md:w-[60vw] md:h-[60vw] border border-black/[0.03] rounded-full animate-[spin_60s_linear_infinite]" />
-        <div className="absolute w-[80vw] h-[80vw] md:w-[40vw] md:h-[40vw] border border-black/[0.04] border-dashed rounded-full animate-[spin_40s_linear_infinite_reverse]" />
-        <div className="absolute w-[60vw] h-[60vw] md:w-[20vw] md:h-[20vw] border border-black/[0.05] rounded-full animate-[spin_20s_linear_infinite]" />
+      {/* Grainient Background */}
+      <div className="absolute inset-0 w-full h-full pointer-events-none z-0">
+        <Grainient
+          color1="#e0fdf4"
+          color2="#99f6e4"
+          color3="#f0fdfa"
+          timeSpeed={0.15}
+          colorBalance={0.1}
+          warpStrength={1.2}
+          warpFrequency={4}
+          warpSpeed={1.5}
+          warpAmplitude={60}
+          blendAngle={15}
+          blendSoftness={0.08}
+          rotationAmount={300}
+          noiseScale={2}
+          grainAmount={0.06}
+          grainScale={2}
+          grainAnimated={false}
+          contrast={1.2}
+          gamma={1}
+          saturation={0.9}
+          zoom={0.95}
+        />
       </div>
 
       <div className="relative z-10 max-w-4xl w-full mx-auto flex flex-col items-center text-center mt-12 lg:mt-0">
         <GlassBadge text="Intelligent Risk Analysis" pulse />
 
         <div className="mt-8 mb-6 relative">
-          <h1 className="text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.05] tracking-[-0.03em] text-[]] drop-shadow-sm">
+          <h1 className="text-[clamp(3rem,6vw,5.5rem)] font-bold leading-[1.05] tracking-[-0.03em] text-[#0f172a] drop-shadow-sm">
             <span className="block animate-slide-up-fade" style={{ animationDelay: '100ms' }}>
-              Navigate the market
+              Navigate the{' '}
+              <span className="relative inline-block border border-[#0EA5A4] px-3 mx-1 text-[#0F172A]" style={{ backgroundColor: 'rgba(245,158,11,0.1)' }}>
+                market
+                <span className="absolute h-2 w-2 bg-[#14B8A6] top-0 left-0 -translate-x-1/2 -translate-y-1/2" />
+                <span className="absolute h-2 w-2 bg-[#14B8A6] top-0 right-0 translate-x-1/2 -translate-y-1/2" />
+                <span className="absolute h-2 w-2 bg-[#14B8A6] bottom-0 left-0 -translate-x-1/2 translate-y-1/2" />
+                <span className="absolute h-2 w-2 bg-[#14B8A6] bottom-0 right-0 translate-x-1/2 translate-y-1/2" />
+              </span>
             </span>
-            <span className="inline-block animate-slide-up-fade text-transparent bg-clip-text bg-gradient-to-r from-[#0f172a] via-[#0d9488] to-[#14b8a6]" style={{ animationDelay: '250ms' }}>
-              with absolute clarity.
+            <span className="block animate-slide-up-fade" style={{ animationDelay: '250ms' }}>
+              with{' '}
+              <Highlighter action="underline" color="#f59e0b" strokeWidth={4} animationDuration={600} iterations={2} delay={900}>
+                absolute clarity.
+              </Highlighter>
             </span>
           </h1>
         </div>
@@ -260,116 +296,87 @@ const MinimalBentoSection: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-min">
 
-        {/* Feature 1 - Spans 8 cols */}
-        <RevealCard className="md:col-span-8 group overflow-hidden" delay={0}>
+        {/* Trend Detection - Spans 4 cols */}
+        <RevealCard className="md:col-span-4 group overflow-hidden" delay={0}>
           <div className="absolute inset-0 bg-gradient-to-br from-[#0d9488]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
-          <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center">
-            <div className="flex-1">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0d9488]/10 to-transparent border border-[#0d9488]/10 flex items-center justify-center text-[#0d9488] mb-6">
-                <Search size={22} />
-              </div>
-              <h3 className="text-2xl font-bold text-[#0f172a] mb-3">Live Risk Categorization</h3>
-              <p className="text-[#475569] font-medium leading-relaxed">Instantly know if it's safe to enter. Our system continuously analyzes 30+ technical metrics to provide clear risk bounds.</p>
-            </div>
-
-            {/* Unique Vertical Data Slot / Scanner Animation */}
-            <div className="w-full md:w-[280px] h-[200px] relative rounded-2xl bg-white border border-black/5 overflow-hidden flex-shrink-0 group/slot flex justify-center items-center">
-              {/* Center Highlight Scanner Box */}
-              <div className="absolute inset-x-0 h-[64px] top-1/2 -translate-y-1/2 bg-[#fafafa]/80 border-y border-black/5 z-0" />
-              <div className="absolute inset-x-0 h-[64px] top-1/2 -translate-y-1/2 z-20 pointer-events-none flex items-center justify-between px-6">
-                <div className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
-                <span className="text-[10px] font-bold text-[#10b981] uppercase tracking-[0.2em] font-mono">Risk: Safe</span>
-              </div>
-
-              {/* Rolling Icons Feed */}
-              <div className="absolute flex flex-col animate-marquee-vertical group-hover/slot:[animation-play-state:paused] z-10 w-full pt-[68px]"> {/* Offset to align initial frame */}
-                {[...Array(2)].map((_, i) => (
-                  <div key={i} className="flex flex-col w-full">
-                    {[
-                      { icon: <BTCIcon />, symbol: "BTC" },
-                      { icon: <ETHIcon />, symbol: "ETH" },
-                      { icon: <SOLIcon />, symbol: "SOL" },
-                      { icon: <XRPIcon />, symbol: "XRP" }
-                    ].map((coin, j) => (
-                      <div key={j} className="h-[64px] flex items-center gap-6 opacity-30 group-hover/slot:opacity-100 transition-all duration-500 w-full px-10 grayscale group-hover/slot:grayscale-0">
-                        <div className="w-10 h-10 flex-shrink-0">{coin.icon}</div>
-                        <span className="font-mono font-bold text-[#0f172a] tracking-tight">{coin.symbol}/USD</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-
-              {/* Edge Fades for Seamless Loop Illusion */}
-              <div className="absolute top-0 inset-x-0 h-16 bg-gradient-to-b from-white to-transparent z-20 pointer-events-none" />
-              <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-white to-transparent z-20 pointer-events-none" />
-            </div>
-          </div>
-        </RevealCard>
-
-        {/* Feature 2 - Spans 4 cols */}
-        <RevealCard className="md:col-span-4 bg-[#0f172a] text-white border-none group" delay={150}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(13,148,136,0.2),transparent_50%)] opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-          <div className="h-full flex flex-col justify-end relative z-10">
-            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white mb-6 backdrop-blur-md">
-              <Zap size={22} className="group-hover:text-[#10b981] transition-colors duration-500" />
-            </div>
-            <h3 className="text-5xl font-mono tracking-tighter mb-3 font-bold">&lt;100<span className="text-[#0d9488] text-2xl ml-1">ms</span></h3>
-            <p className="text-[#94a3b8] font-medium leading-relaxed">Lightning-fast, real-time market data processing.</p>
-          </div>
-        </RevealCard>
-
-        {/* Feature 3 - Spans 4 cols */}
-        <RevealCard className="md:col-span-4 group" delay={0}>
-          <div className="h-full flex flex-col justify-between">
-            <div className="w-12 h-12 rounded-xl bg-[#fafafa] border border-black/5 flex items-center justify-center text-[#0d9488] mb-6">
+          <div className="flex flex-col h-full relative z-10 w-full">
+            <div className="w-12 h-12 rounded-xl bg-[#fafafa] border border-black/5 flex items-center justify-center text-[#0d9488] mb-6 shadow-sm">
               <Eye size={22} />
             </div>
-            <div>
-              <h3 className="text-xl font-bold text-[#0f172a] mb-2">Trend Detection</h3>
-              <p className="text-[#475569] font-medium text-sm leading-relaxed">Automatically identifies market momentum—whether bull, bear, or completely sideways.</p>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-[#0f172a] mb-2">ML Models</h3>
+              <p className="text-[#475569] font-medium text-sm leading-relaxed">Powered by an ensemble of purpose-built models for risk, regime, volatility, and clustering.</p>
+            </div>
+
+            {/* RotatingText model names */}
+            <div className="mt-8 flex items-center gap-3 flex-wrap text-base font-medium text-[#475569]">
+              <span>Powered by</span>
+              <RotatingText
+                texts={['XGBoost', 'Random Forest', 'HMM', 'Quantile Regression', 'K-Means', 'PCA']}
+                mainClassName="px-4 py-1.5 bg-[#0d9488]/10 text-[#0d9488] text-lg font-bold rounded-lg overflow-hidden"
+                staggerFrom="last"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '-120%' }}
+                staggerDuration={0.025}
+                splitLevelClassName="overflow-hidden"
+                transition={{ type: 'spring', damping: 30, stiffness: 400 }}
+                rotationInterval={2000}
+              />
             </div>
           </div>
         </RevealCard>
 
-        {/* Feature 4 - Spans 8 cols */}
+        {/* Live Risk Alerts - Spans 8 cols */}
         <RevealCard className="md:col-span-8 group overflow-hidden" delay={150}>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(16,185,129,0.05),transparent_60%)] opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
+
+          <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center h-full">
+            <div className="flex-1">
+              <div className="w-12 h-12 rounded-xl bg-[#fafafa] border border-black/5 flex items-center justify-center text-[#0d9488] mb-6 shadow-sm relative overflow-hidden group-hover:border-[#0d9488]/30 transition-colors duration-500">
+                <Search size={22} className="relative z-10 text-[#0d9488] group-hover:text-[#10b981] transition-colors duration-500" />
+              </div>
+              <h3 className="text-3xl font-bold tracking-tighter text-[#0f172a] mb-3">Trend Detection</h3>
+              <p className="text-[#475569] font-medium leading-relaxed max-w-sm">Automatically identifies market momentum—whether bull, bear, or completely sideways.</p>
+            </div>
+
+            {/* TrueFocus Animation */}
+            <div className="w-full md:w-[350px] relative mt-6 md:mt-0 flex items-center justify-center">
+              <TrueFocus
+                sentence="Bullish Bearish Neutral"
+                manualMode={false}
+                blurAmount={6}
+                borderColor="#0d9488"
+                glowColor="rgba(13,148,136,0.4)"
+                animationDuration={0.5}
+                pauseBetweenAnimations={2}
+                wordColors={['#10b981', '#ef4444', '#94a3b8']}
+              />
+            </div>
+          </div>
+        </RevealCard>
+
+        {/* Smarter Indicators - Spans 12 cols */}
+        <RevealCard className="md:col-span-12 group overflow-hidden" delay={0}>
           <div className="absolute right-0 top-0 w-1/2 h-full bg-[radial-gradient(circle_at_center,rgba(20,184,166,0.05),transparent_70%)] group-hover:opacity-100 opacity-0 transition-opacity duration-700" />
 
           <div className="relative z-10 flex flex-col md:flex-row gap-10 items-center h-full">
             <div className="flex-1">
-              <div className="w-12 h-12 rounded-xl bg-[#fafafa] border border-black/5 flex items-center justify-center text-[#0d9488] mb-6">
-                <BarChart size={22} />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0d9488]/10 to-transparent border border-[#0d9488]/10 flex items-center justify-center text-[#0d9488] mb-6">
+                <Database size={22} />
               </div>
-              <h3 className="text-2xl font-bold text-[#0f172a] mb-3">Smarter Indicators</h3>
-              <p className="text-[#475569] font-medium leading-relaxed">
-                RSI, MACD, and Bollinger Bands tracked natively and continuously, displayed only when there's an actionable signal.
-              </p>
+              <h3 className="text-2xl font-bold text-[#0f172a] mb-3">Live Global Data Streams</h3>
+              <p className="text-[#475569] font-medium leading-relaxed">Continuous tracking of institutional capital flows, liquidity nodes, and real-time market data across global exchanges and decentralized networks.</p>
             </div>
 
-            <div className="w-full md:w-auto mt-6 md:mt-0 relative group">
-              <div className="p-6 rounded-2xl bg-white border border-black/[0.04] shadow-lg group-hover:-translate-y-2 transition-transform duration-500 ease-out-expo min-w-[200px]">
-                <div className="flex justify-between items-center mb-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6"><BTCIcon /></div>
-                    <span className="font-mono text-xs font-bold text-[#0a0a0a]">BTC/USD</span>
-                  </div>
-                  <span className="font-mono text-[10px] font-bold text-[#10b981] bg-[#10b981]/10 px-2 py-1 rounded-full">+4.2%</span>
-                </div>
-                <div className="h-12 w-full flex items-end justify-between gap-1 overflow-hidden">
-                  {[30, 45, 60, 40, 70, 85, 55, 90].map((h, i) => (
-                    <div
-                      key={i}
-                      className="w-full bg-[#0d9488] rounded-t-sm transform translate-y-[100%] group-hover:translate-y-0 transition-transform duration-700 ease-out-expo"
-                      style={{ height: `${h}%`, transitionDelay: `${i * 50}ms`, opacity: (i + 1) / 8 }}
-                    />
-                  ))}
-                </div>
-              </div>
+            {/* Globe Demonstration replacing beam */}
+            <div className="w-full md:w-[650px] h-[500px] relative z-20 flex items-center justify-center mt-6 md:mt-0">
+              <GlobeDemo />
             </div>
           </div>
         </RevealCard>
+
 
       </div>
     </section>
@@ -378,33 +385,97 @@ const MinimalBentoSection: React.FC = () => {
 
 // 3. Immersive Typography Marquee Banner
 const CryptoMarquee: React.FC = () => {
-  const assets = [
-    { icon: <BTCIcon />, label: "BITCOIN" },
-    { icon: <ETHIcon />, label: "ETHEREUM" },
-    { icon: <SOLIcon />, label: "SOLANA" },
-    { icon: <XRPIcon />, label: "RIPPLE" }
+  const coins = [
+    { ticker: "BTC", label: "BITCOIN",           id: 1 },
+    { ticker: "ETH", label: "ETHEREUM",          id: 1027 },
+    { ticker: "SOL", label: "SOLANA",            id: 5426 },
+    { ticker: "XRP", label: "RIPPLE",            id: 52 },
+    { ticker: "BNB", label: "BINANCE",           id: 1839 },
+    { ticker: "ADA", label: "CARDANO",           id: 2010 },
+    { ticker: "DOGE", label: "DOGECOIN",         id: 74 },
+    { ticker: "AVAX", label: "AVALANCHE",        id: 5805 },
+    { ticker: "MATIC", label: "POLYGON",         id: 3890 },
+    { ticker: "DOT", label: "POLKADOT",          id: 6636 },
+    { ticker: "LINK", label: "CHAINLINK",        id: 1975 },
+    { ticker: "UNI", label: "UNISWAP",           id: 7083 },
+    { ticker: "ATOM", label: "COSMOS",           id: 3794 },
+    { ticker: "LTC", label: "LITECOIN",          id: 2 },
+    { ticker: "NEAR", label: "NEAR",             id: 6535 },
+    { ticker: "APT", label: "APTOS",             id: 21794 },
+    { ticker: "ARB", label: "ARBITRUM",          id: 11841 },
+    { ticker: "OP", label: "OPTIMISM",           id: 11840 },
+    { ticker: "INJ", label: "INJECTIVE",         id: 7226 },
+    { ticker: "SUI", label: "SUI",               id: 20947 },
+    { ticker: "TIA", label: "CELESTIA",          id: 22861 },
+    { ticker: "JUP", label: "JUPITER",           id: 29210 },
+    { ticker: "WIF", label: "DOGWIFHAT",         id: 28752 },
+    { ticker: "PEPE", label: "PEPE",             id: 24478 },
+    { ticker: "SHIB", label: "SHIBA INU",        id: 5994 },
+    { ticker: "TRX", label: "TRON",              id: 1958 },
+    { ticker: "XLM", label: "STELLAR",           id: 512 },
+    { ticker: "HBAR", label: "HEDERA",           id: 4642 },
+    { ticker: "FIL", label: "FILECOIN",          id: 2280 },
+    { ticker: "AAVE", label: "AAVE",             id: 7278 },
+    { ticker: "MKR", label: "MAKER",             id: 1518 },
+    { ticker: "CRV", label: "CURVE",             id: 6538 },
+    { ticker: "GMX", label: "GMX",               id: 11857 },
+    { ticker: "LDO", label: "LIDO",              id: 8000 },
+    { ticker: "FTM", label: "FANTOM",            id: 3513 },
+    { ticker: "ICP", label: "INTERNET COMPUTER", id: 8916 },
+    { ticker: "SEI", label: "SEI",               id: 23149 },
+    { ticker: "PYTH", label: "PYTH",             id: 28177 },
+    { ticker: "FLOKI", label: "FLOKI",           id: 10804 },
+    { ticker: "ETC", label: "ETHEREUM CLASSIC",  id: 1321 },
+    { ticker: "ALGO", label: "ALGORAND",         id: 4030 },
+    { ticker: "VET", label: "VECHAIN",           id: 3077 },
+    { ticker: "SAND", label: "SANDBOX",          id: 6210 },
+    { ticker: "AXS", label: "AXIE",              id: 6783 },
+    { ticker: "COMP", label: "COMPOUND",         id: 5692 },
+    { ticker: "SNX", label: "SYNTHETIX",         id: 2586 },
+    { ticker: "DYDX", label: "DYDX",             id: 11156 },
+    { ticker: "RPL", label: "ROCKETPOOL",        id: 2943 },
+    { ticker: "BCH", label: "BITCOIN CASH",      id: 1831 },
+    { ticker: "MANA", label: "DECENTRALAND",     id: 1966 },
   ];
 
+  const iconUrl = (ticker: string) =>
+    `https://assets.coincap.io/assets/icons/${ticker.toLowerCase()}@2x.png`;
+
   return (
-    <section className="py-32 relative z-10 bg-[#FAFAFA] border-y border-black/[0.03] overflow-hidden flex">
-      {/* Soft gradients for edge fading */}
+    <section className="py-24 relative z-10 bg-[#FAFAFA] border-y border-black/[0.03] overflow-hidden flex">
       <div className="absolute left-0 top-0 bottom-0 w-32 md:w-64 bg-gradient-to-r from-[#FAFAFA] to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-32 md:w-64 bg-gradient-to-l from-[#FAFAFA] to-transparent z-10 pointer-events-none" />
 
       <div className="flex whitespace-nowrap animate-marquee w-max">
-        {[...Array(4)].map((_, i) => (
+        {[...Array(2)].map((_, i) => (
           <div key={i} className="flex items-center">
-            {assets.map((asset, j) => (
-              <div key={j} className="flex items-center gap-6 md:gap-12 mx-8 md:mx-16 group cursor-pointer transition-transform duration-700 hover:scale-[1.02]">
-                <div className="w-16 h-16 md:w-20 md:h-20 opacity-30 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500 drop-shadow-2xl">
-                  {asset.icon}
+            {coins.map((coin, j) => (
+              <div key={j} className="flex items-center gap-4 md:gap-6 mx-6 md:mx-12 group cursor-pointer transition-transform duration-500 hover:scale-[1.03]">
+                <div className="w-10 h-10 md:w-14 md:h-14 opacity-30 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500 flex-shrink-0">
+                  <img
+                    src={iconUrl(coin.ticker)}
+                    alt={coin.ticker}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent && !parent.querySelector('.ticker-fallback')) {
+                        const fallback = document.createElement('div');
+                        fallback.className = 'ticker-fallback w-full h-full rounded-full bg-[#0d9488]/20 flex items-center justify-center text-[#0d9488] font-black text-[10px]';
+                        fallback.textContent = coin.ticker.slice(0, 3);
+                        parent.appendChild(fallback);
+                      }
+                    }}
+                  />
                 </div>
                 <span
-                  className="text-[4rem] md:text-[7.5rem] font-bold tracking-[-0.04em] text-transparent transition-all duration-700 group-hover:text-[#0f172a]"
-                  style={{ WebkitTextStroke: '2px rgba(15, 23, 42, 0.1)' }}
+                  className="text-[2.5rem] md:text-[5rem] font-black tracking-[-0.04em] text-transparent transition-all duration-500 group-hover:text-[#0f172a]"
+                  style={{ WebkitTextStroke: '2px rgba(15,23,42,0.25)' }}
                 >
-                  {asset.label}
+                  {coin.label}
                 </span>
+                <span className="text-[#0f172a]/15 text-3xl md:text-5xl font-thin">·</span>
               </div>
             ))}
           </div>
@@ -419,42 +490,64 @@ const PipelineSection: React.FC = () => {
   const { ref, isVisible } = useIntersectionObserver({ threshold: 0.3 });
 
   return (
-    <section ref={ref} className="py-32 relative z-10 px-6 max-w-5xl mx-auto flex flex-col items-center">
-      <div className="text-center mb-24">
-        <GlassBadge text="System Flow" />
-        <h2 className="text-4xl font-bold tracking-[-0.03em] text-[#0f172a] mt-6 mb-4">
-          Data doesn't sleep.
-        </h2>
-        <p className="text-[#475569] text-lg font-medium leading-relaxed max-w-2xl">
-          From raw market feeds to clear dashboard visuals in milliseconds. Constant updates. Constant edge.
-        </p>
+    <section ref={ref} className="py-32 relative z-10 w-full overflow-hidden">
+      {/* GridScan background */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <GridScan
+          sensitivity={0.55}
+          lineThickness={0.55}
+          linesColor="#0d4a42"
+          gridScale={0.1}
+          scanColor="#0d9488"
+          scanOpacity={0.5}
+          enablePost={true}
+          bloomIntensity={0.4}
+          chromaticAberration={0.001}
+          noiseIntensity={0.008}
+          scanDirection="pingpong"
+          scanDuration={3}
+          scanDelay={1}
+        />
       </div>
+      <div className="relative z-10 w-full max-w-5xl mx-auto px-6 flex flex-col items-center">
+        <div className="w-full min-h-[42vh] flex items-center justify-center text-center mb-10">
+          <div>
+            <GlassBadge text="System Flow" />
+            <h2 className="text-4xl font-bold tracking-[-0.03em] text-[#0f172a] mt-6 mb-4">
+              Data doesn't sleep.
+            </h2>
+            <p className="text-[#475569] text-lg font-medium leading-relaxed max-w-2xl">
+              From raw market feeds to clear dashboard visuals in milliseconds. Constant updates. Constant edge.
+            </p>
+          </div>
+        </div>
 
-      <div className="w-full relative py-8">
-        <div className="absolute top-1/2 left-[10%] w-[80%] h-[1px] bg-black/5 -translate-y-1/2 hidden md:block" />
+        <div className="w-full relative py-8">
+          <div className="absolute top-1/2 left-[10%] w-[80%] h-[1px] bg-black/5 -translate-y-1/2 hidden md:block" />
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 relative z-10">
-          {[
-            { icon: <Database />, title: "Ingest", desc: "Live ticks" },
-            { icon: <Layers />, title: "Extract", desc: "Processing" },
-            { icon: <Brain />, title: "Score", desc: "Analysis" },
-            { icon: <BarChart3 />, title: "Render", desc: "Dashboards" }
-          ].map((step, i) => (
-            <div
-              key={i}
-              className={`flex flex-col items-center justify-center transition-all duration-700 ease-out-expo group
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-10 relative z-10">
+            {[
+              { icon: <Database />, title: "Ingest", desc: "Live ticks" },
+              { icon: <Layers />, title: "Extract", desc: "Processing" },
+              { icon: <Brain />, title: "Score", desc: "Analysis" },
+              { icon: <BarChart3 />, title: "Render", desc: "Dashboards" }
+            ].map((step, i) => (
+              <div
+                key={i}
+                className={`flex flex-col items-center justify-center transition-all duration-700 ease-out-expo group
                                 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}
                             `}
-              style={{ transitionDelay: `${i * 150}ms` }}
-            >
-              <div className="w-20 h-20 mb-5 rounded-2xl bg-white border border-black/5 shadow-sm flex items-center justify-center relative group-hover:shadow-[0_10px_30px_rgba(13,148,136,0.1)] group-hover:-translate-y-2 transition-all duration-500 ease-out-expo">
-                <div className="absolute inset-0 rounded-2xl border border-[#0d9488]/20 scale-[1.15] opacity-0 group-hover:scale-110 group-hover:opacity-100 transition-all duration-500" />
-                <div className="text-[#0f172a] group-hover:text-[#0d9488] transition-colors">{step.icon}</div>
+                style={{ transitionDelay: `${i * 150}ms` }}
+              >
+                <div className="w-20 h-20 mb-5 rounded-2xl bg-white border border-black/5 shadow-sm flex items-center justify-center relative group-hover:shadow-[0_10px_30px_rgba(13,148,136,0.1)] group-hover:-translate-y-2 transition-all duration-500 ease-out-expo">
+                  <div className="absolute inset-0 rounded-2xl border border-[#0d9488]/20 scale-[1.15] opacity-0 group-hover:scale-110 group-hover:opacity-100 transition-all duration-500" />
+                  <div className="text-[#0f172a] group-hover:text-[#0d9488] transition-colors">{step.icon}</div>
+                </div>
+                <h4 className="font-bold text-[#0f172a]">{step.title}</h4>
+                <span className="text-xs text-[#64748b] font-medium mt-1">{step.desc}</span>
               </div>
-              <h4 className="font-bold text-[#0f172a]">{step.title}</h4>
-              <span className="text-xs text-[#64748b] font-medium mt-1">{step.desc}</span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -492,7 +585,7 @@ const LandingPage: React.FC = () => {
     .animate-blob { animation: blob 15s infinite alternate ease-in-out; }
     .animation-delay-2000 { animation-delay: 2s; }
     .animate-slide-up-fade { animation: slideUpFade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
-    .animate-marquee { animation: marquee 35s linear infinite; }
+    .animate-marquee { animation: marquee 60s linear infinite; }
     .animate-marquee-reverse { animation: marquee-reverse 40s linear infinite; }
     .animate-marquee-vertical { animation: marquee-vertical 8s linear infinite; }
     .ease-out-expo { transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
