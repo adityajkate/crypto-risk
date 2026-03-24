@@ -3,237 +3,234 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=flat-square)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%7C%20RF%20%7C%20HMM-orange?style=flat-square)
-![Data](https://img.shields.io/badge/Data-CoinGecko%20%7C%20RSS%20%7C%20Reddit%20%7C%20Google%20News-purple?style=flat-square)
 
-Real-time crypto risk assessment using four ML models in concert. You hit an endpoint with a coin ID, it fetches live candles, runs everything, and returns a risk verdict with full reasoning.
+Real-time cryptocurrency risk assessment platform using machine learning. Analyzes live market data, news sentiment, and technical indicators to provide risk scores and predictions.
 
 ---
 
-## How It Works
+## Quick Start
+
+### Backend Setup
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Add your API keys to .env
+
+# Train models (first time only)
+cd ml/scripts
+python run_all.py
+
+# Start API server
+python run_api.py
+# API: http://localhost:8000
+```
+
+### Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+# UI: http://localhost:3000
+```
+
+---
+
+## Architecture
 
 ```
-Live OHLCV (CoinGecko)
-        │
-        ▼
- Feature Engineering        ← 30+ technical indicators (TA-Lib)
-        │
-   ┌────┴────────────────────────────┐
-   ▼         ▼           ▼          ▼
-Regime    Cluster    Volatility   Risk RF
- HMM      K-Means    Regressor   Classifier
-   │         │           │          │
-   └────┬────────────────┘          │
-        │   Regime blending         │
-        └──────────────────────────►│
-                                    ▼
-                             Risk: low / medium / high
-                             + confidence + warning
+User Request (coin ID)
+        ↓
+┌───────────────────────────────────────┐
+│  FastAPI Backend (backend/api/)       │
+│  - Fetch live OHLCV from CoinGecko    │
+│  - Scrape news (RSS, Reddit, Google)  │
+│  - Process sentiment with LLM         │
+└───────────────────────────────────────┘
+        ↓
+┌───────────────────────────────────────┐
+│  Feature Engineering (core/)          │
+│  - 30+ technical indicators (TA-Lib)  │
+│  - RSI, MACD, Bollinger, ATR, etc.    │
+└───────────────────────────────────────┘
+        ↓
+┌───────────────────────────────────────┐
+│  ML Models (ml/)                      │
+│  ├─ Risk Classifier (Random Forest)   │
+│  ├─ Volatility Regressor (QuantReg)   │
+│  ├─ Market Clustering (K-Means)       │
+│  └─ Regime Detection (HMM)            │
+└───────────────────────────────────────┘
+        ↓
+┌───────────────────────────────────────┐
+│  Probability Blending & Adjustment    │
+│  - Regime-based risk weighting        │
+│  - Volatility spike detection         │
+│  - Confidence scoring                 │
+└───────────────────────────────────────┘
+        ↓
+    Risk Score: Low / Medium / High
+    + Confidence + Reasoning
 ```
 
 ---
 
-## Stack
-
-| Layer | What |
-|---|---|
-| API | FastAPI + Uvicorn |
-| Features | TA-Lib, pandas, numpy |
-| Models | scikit-learn, XGBoost, hmmlearn, statsmodels |
-| Data | CoinGecko (OHLCV), RSS feeds, Google News, Reddit, BitcoinTalk |
-| Artifacts | joblib serialization |
-
----
-
-## Project Layout
+## Project Structure
 
 ```
 crypto-risk/
-├── backend/
+├── backend/              # API & data processing
 │   ├── api/
-│   │   ├── main.py                  # FastAPI endpoints
-│   │   ├── coingecko_realtime.py    # CoinGecko client
-│   │   └── event_store.py           # In-memory event storage
-│   ├── models/
-│   │   └── predictor.py             # ML inference engine
-│   ├── scrapers/                    # News scrapers (Layer A/B)
-│   ├── workers/                     # Background workers
-│   └── services/                    # LLM summarization
-├── core/
-│   ├── coin_metadata.py             # Coin mapping utilities
-│   ├── coingecko_client.py          # Shared CoinGecko client
-│   └── feature_engine.py            # Feature engineering (TA-Lib)
-├── ml/
-│   ├── collect_training_data.py     # Data collection
-│   ├── preprocess.py                # Data preprocessing
-│   ├── label_generator.py           # Risk label generation
-│   ├── train_risk_classifier.py     # Risk model training
-│   ├── train_regression.py          # Volatility forecasting
-│   ├── train_clustering.py          # Market clustering
-│   ├── train_regime_model.py        # HMM regime detection
-│   └── run_all.py                   # Full training pipeline
-├── models/                          # Trained model artifacts (.joblib)
-├── frontend/                        # React + TypeScript UI
-└── docs/                            # Documentation
+│   │   ├── main.py                    # FastAPI endpoints
+│   │   ├── coingecko_realtime.py      # Live price data
+│   │   ├── event_store.py             # Event storage
+│   │   ├── fear_greed_client.py       # Fear & Greed Index
+│   │   └── google_trends_client.py    # Google Trends data
+│   ├── scrapers/
+│   │   ├── layer_a.py                 # RSS/Reddit scrapers
+│   │   └── layer_b.py                 # Google News scraper
+│   ├── services/
+│   │   └── llm_summarizer.py          # LLM sentiment analysis
+│   └── workers/
+│       ├── clustering_worker.py       # Background clustering
+│       └── sentiment_worker.py        # Sentiment processing
+│
+├── core/                 # Shared utilities
+│   ├── coin_metadata.py              # Coin mapping & metadata
+│   ├── coingecko_client.py           # CoinGecko API client
+│   ├── feature_engine.py             # Technical indicators
+│   └── models.py                     # Data models
+│
+├── ml/                   # Machine learning
+│   ├── scripts/
+│   │   ├── collect_training_data.py  # Data collection
+│   │   ├── preprocess.py             # Data preprocessing
+│   │   ├── label_generator.py        # Risk labels
+│   │   ├── train_risk_classifier.py  # Risk model
+│   │   ├── train_regression.py       # Volatility forecasting
+│   │   ├── train_clustering.py       # Market clustering
+│   │   ├── train_regime_model.py     # HMM regime detection
+│   │   └── run_all.py                # Full training pipeline
+│   └── data/                         # Training data storage
+│
+├── frontend/             # React + TypeScript UI
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── LandingPage.tsx       # Home page
+│   │   │   ├── Dashboard.tsx         # Main dashboard
+│   │   │   ├── SentimentPage.tsx     # Sentiment analysis
+│   │   │   └── TopCoinsPage.tsx      # Top coins view
+│   │   ├── components/               # Reusable components
+│   │   ├── services/
+│   │   │   └── apiClient.ts          # API integration
+│   │   └── context/
+│   │       └── CryptoContext.tsx     # Global state
+│   └── ...
+│
+└── models/               # Trained model artifacts (.joblib)
 ```
 
 ---
 
-## Data
+## Code Workflow
 
-Training data is the **top 50 coins by market cap** pulled from CoinGecko — full daily price history per coin. The raw feed is just `timestamp / price / volume`. Preprocessing converts it to OHLCV (open approximated as previous close, high/low as ±1%), then `MarketFeatureEngine` computes all indicators, and `LabelGenerator` stamps each row with a risk class.
+### 1. Data Collection (`ml/scripts/collect_training_data.py`)
 
-At inference, the exact same feature engineering runs on **live candles** fetched per request. Nothing cached, nothing stale.
+- Fetches top 50 coins by market cap from CoinGecko
+- Downloads full price history (timestamp, price, volume)
+- Saves raw data to `ml/data/raw/`
 
----
+### 2. Preprocessing (`ml/scripts/preprocess.py`)
 
-## Features
+- Converts raw data to OHLCV format
+- Approximates open/high/low from close prices
+- Applies feature engineering via [`MarketFeatureEngine`](core/feature_engine.py)
+- Generates 30+ technical indicators
 
-<details>
-<summary><strong>Returns & Volatility</strong></summary>
+### 3. Label Generation (`ml/scripts/label_generator.py`)
 
-| Feature | What it captures |
-|---|---|
-| `returns_1d` | 1-day percent price change |
-| `log_returns` | log(close / prev_close) — used as HMM input |
-| `volatility_7d` | 7-day rolling std of log returns |
-| `volatility_30d` | 30-day rolling std — medium-term instability |
+- Assigns risk labels based on absolute thresholds:
+  - **High (2)**: drawdown > 30% OR 30d volatility > 2%
+  - **Medium (1)**: drawdown 15-30% OR 30d volatility 1-2%
+  - **Low (0)**: everything else
 
-</details>
+### 4. Model Training (`ml/scripts/train_*.py`)
 
-<details>
-<summary><strong>Trend & Momentum</strong></summary>
+- **Risk Classifier**: Random Forest (500 trees, depth 20)
+- **Volatility Regressor**: Quantile regression (10th, 50th, 90th percentiles)
+- **Market Clustering**: K-Means on 7 key features
+- **Regime Detection**: Gaussian HMM on log returns + volatility
+- Models saved to `models/` directory
 
-| Feature | What it captures |
-|---|---|
-| `rsi_14` | Overbought / oversold (>70 / <30) |
-| `macd` / `macd_signal` / `macd_hist` | Trend direction, signal line, acceleration |
-| `stoch_rsi` | RSI of RSI — extreme momentum detection |
-| `adx` | Trend strength regardless of direction |
-| `cci` | Deviation from statistical mean price |
-| `willr` | Williams %R — momentum oscillator |
-| `roc` | Rate of change over 10 days |
-| `momentum` | Raw price difference over 10 days |
-| `trix` | Triple EMA ROC — filters noise |
-| `ultosc` | Multi-timeframe oscillator |
-| `aroon_osc` | Time since recent high vs low |
-| `bop` | (close − open) / (high − low) — buyer/seller dominance |
+### 5. API Inference (`backend/api/main.py`)
 
-</details>
+When a request comes in:
 
-<details>
-<summary><strong>Bands, Volume & Price Position</strong></summary>
+1. Fetch live OHLCV data from CoinGecko
+2. Run feature engineering (same as training)
+3. Load trained models and predict
+4. Blend probabilities based on regime/volatility
+5. Return risk score + confidence + reasoning
 
-| Feature | What it captures |
-|---|---|
-| `bb_width` | Bollinger Band width — compression vs expansion |
-| `atr_14` | Average True Range — market choppiness |
-| `obv` | On-Balance Volume — volume confirms trend or diverges |
-| `volume_sma_ratio` | Volume vs 20-day avg — detects abnormal spikes |
-| `mfi` | Money Flow Index — RSI weighted by volume |
-| `price_sma50_ratio` | Price relative to 50-day SMA |
-| `price_sma200_ratio` | Long-term trend position |
+### 6. Background Workers (`backend/workers/`)
 
-</details>
+- **Sentiment Worker**: Scrapes news, processes with LLM
+- **Clustering Worker**: Updates market clusters periodically
 
-<details>
-<summary><strong>Drawdown</strong></summary>
+### 7. Frontend (`frontend/src/`)
 
-| Feature | What it captures |
-|---|---|
-| `drawdown` | % below all-time high (expanding window) |
-| `max_drawdown_30d` | Worst drawdown in last 30 days |
-| `drawdown_duration` | Days continuously below −1% threshold |
-| `recovery_ratio` | drawdown / max_drawdown — recovering or still falling |
-| `drawdown_vol_interaction` | abs(drawdown) × volatility_30d — the dangerous combo |
-
-</details>
-
-<details>
-<summary><strong>Regime Features</strong></summary>
-
-| Feature | What it captures |
-|---|---|
-| `regime` | 0 = stable / 1 = transition / 2 = crisis (volatility quantile rules) |
-| `regime_volatility_interaction` | regime × volatility_30d |
-| `regime_drawdown_interaction` | regime × abs(drawdown) |
-
-</details>
+- Displays risk scores, charts, and sentiment
+- Real-time updates via API polling
+- Interactive visualizations with React + TypeScript
 
 ---
 
-## Labels
+## Key Features
 
-Absolute thresholds — not percentiles. Percentile labeling would call a market-wide crash "low risk" because everything crashed equally.
+### Technical Indicators (30+)
 
-| Class | Condition |
-|---|---|
-| `2` High | drawdown > 30% or 30d vol > 2% |
-| `1` Medium | drawdown 15–30% or 30d vol 1–2% |
-| `0` Low | everything else |
+- **Trend**: RSI, MACD, ADX, CCI, Aroon
+- **Volatility**: Bollinger Bands, ATR, Standard Deviation
+- **Volume**: OBV, MFI, Volume Ratio
+- **Momentum**: Stochastic RSI, Williams %R, ROC
+- **Drawdown**: Max drawdown, recovery ratio, duration
 
----
+### ML Models
 
-## Models
+- **Risk Classifier**: Predicts low/medium/high risk with confidence
+- **Volatility Forecaster**: 7-day forward volatility with confidence intervals
+- **Market Clustering**: Groups coins by behavior patterns
+- **Regime Detection**: Identifies stable/transition/crisis states
 
-### Risk Classifier
+### Sentiment Analysis
 
-Three models trained, Random Forest used at inference.
-
-| Model | Notes |
-|---|---|
-| Logistic Regression | Multinomial, C=10, balanced weights |
-| **Random Forest** | 500 trees, depth 20 — used in production |
-| XGBoost | 300 estimators, early stopping on log-loss |
-
-Training is strict about time series integrity — temporal 80/20 split, no shuffle, `TimeSeriesSplit` CV. Probabilities are calibrated on a holdout set using isotonic regression so that P=0.8 actually means 80%. An epsilon floor (1e-4) prevents zero-probability collapse.
-
-### Volatility Regressor
-
-Predicts 7-day forward volatility. Target is `volatility_7d` shifted back 7 rows.
-
-| Model | Output |
-|---|---|
-| Linear Regression | Point estimate |
-| QuantReg q=0.10 | Optimistic bound |
-| QuantReg q=0.50 | Median |
-| QuantReg q=0.90 | Risk-side bound |
-
-The three quantiles give a confidence interval. If predicted vol expands > 2× current, it feeds back into the blending step as a risk signal.
-
-### Market Clustering
-
-K-Means on 7 features (`volatility_7d`, `volatility_30d`, `returns_1d`, `volume_sma_ratio`, `rsi_14`, `bb_width`, `drawdown`). Optimal K chosen by silhouette score (tested 2–6). Agglomerative with Ward linkage also trained as backup.
-
-### Regime Detection (HMM)
-
-Gaussian HMM on sequences of `(log_returns, volatility_7d)`. Unlike clustering, it models temporal persistence — a coin in crisis for 10 days stays weighted toward crisis more than one that had a single bad day. Number of states (2–4) picked by BIC. States named by mean volatility ordering:
-
-- `low_vol_stable`
-- `moderate_transition`
-- `high_vol_crisis`
-
-PELT change-point detection (RBF kernel) is also run on `log_returns` to find structural breaks in the series.
+- Scrapes RSS feeds, Reddit, Google News
+- LLM-powered sentiment scoring
+- Fear & Greed Index integration
+- Google Trends correlation
 
 ---
 
-## Inference — Probability Blending
+## API Endpoints
 
-The RF classifier outputs raw probabilities. These are adjusted before the final label is assigned:
-
-| Condition | Effect on P(low) |
-|---|---|
-| Regime = `high_vol_crisis` | × 0.2 |
-| Regime = `moderate_transition` + (drawdown > 20% or vol > 1%) | × 0.5 |
-| Predicted vol > 2× current | × 0.5 |
-| Drawdown > 30% | × 0.3 |
-
-Probabilities are re-normalized after adjustment. Final label = argmax.
-
-A prediction is flagged **uncertain** when max confidence < 0.65 or the margin between top-2 classes < 0.10.
+| Endpoint                           | Description                                          |
+| ---------------------------------- | ---------------------------------------------------- |
+| `GET /api/v1/coin/{id}/analysis`   | Full analysis (risk + volatility + cluster + regime) |
+| `GET /api/v1/coin/{id}/risk`       | Risk assessment only                                 |
+| `GET /api/v1/coin/{id}/price`      | Current price + market data                          |
+| `GET /api/v1/batch/analysis`       | Batch analysis (up to 10 coins)                      |
+| `GET /api/v1/sentiment/{currency}` | Sentiment analysis for coin                          |
+| `GET /api/v1/trending`             | Trending coins from CoinGecko                        |
+| `GET /api/v1/global`               | Global market metrics                                |
+| `GET /health`                      | Health check                                         |
 
 ---
 
-## Sample Response
+## Example Response
 
 ```json
 {
@@ -246,7 +243,11 @@ A prediction is flagged **uncertain** when max confidence < 0.65 or the margin b
   },
   "volatility_forecast": {
     "predicted_volatility_7d": 0.028,
-    "confidence_intervals": { "lower_10": 0.012, "median_50": 0.025, "upper_90": 0.051 }
+    "confidence_intervals": {
+      "lower_10": 0.012,
+      "median_50": 0.025,
+      "upper_90": 0.051
+    }
   },
   "market_cluster": { "cluster": 2 },
   "market_regime": { "regime_name": "high_vol_crisis" }
@@ -255,58 +256,29 @@ A prediction is flagged **uncertain** when max confidence < 0.65 or the margin b
 
 ---
 
-## Setup
+## Tech Stack
 
-### Backend
+- **Backend**: FastAPI, Uvicorn, Python 3.10+
+- **ML**: scikit-learn, XGBoost, hmmlearn, TA-Lib
+- **Data**: CoinGecko API, RSS feeds, Reddit API, Google News
+- **Frontend**: React, TypeScript, Vite
+- **Storage**: In-memory event store, joblib model serialization
 
-1. **Install Python dependencies:**
+---
+
+## Environment Variables
+
+Create a [`.env`](.env.example) file:
+
 ```bash
-pip install -r requirements.txt
-```
-
-2. **Configure environment variables:**
-```bash
-cp .env.example .env
-# Edit .env with your API keys
-```
-
-3. **Train models (first time only):**
-```bash
-cd ml
-python run_all.py
-```
-
-4. **Run the API:**
-```bash
-python run_api.py
-# API runs on http://localhost:8000
-```
-
-### Frontend
-
-1. **Install dependencies:**
-```bash
-cd frontend
-npm install
-```
-
-2. **Run development server:**
-```bash
-npm run dev
-# Frontend runs on http://localhost:3000
+COINGECKO_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here  # For LLM sentiment
+REDDIT_CLIENT_ID=your_id
+REDDIT_CLIENT_SECRET=your_secret
 ```
 
 ---
 
-## API
+## License
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/v1/coin/{id}/analysis` | Full analysis — risk + vol forecast + cluster + regime |
-| `GET /api/v1/coin/{id}/risk` | Risk label only |
-| `GET /api/v1/coin/{id}/price` | Current price + market data |
-| `GET /api/v1/batch/analysis` | Up to 10 coins, comma-separated |
-| `GET /api/v1/trending` | Trending from CoinGecko |
-| `GET /api/v1/global` | Global market metrics |
-| `GET /api/v1/sentiment/{currency}` | Sentiment per coin |
-| `GET /health` | Health check |
+MIT
