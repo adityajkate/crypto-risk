@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=32&duration=3000&pause=1000&color=6366F1&center=true&vCenter=true&width=600&lines=Crypto+Risk+Lens+%F0%9F%94%8D;Real-Time+Risk+Assessment;ML-Powered+Analytics" alt="Crypto Risk Lens" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=32&duration=3000&pause=1000&color=6366F1&center=true&vCenter=true&width=600&lines=Crypto+Risk+Lens;Real-Time+Risk+Assessment;ML-Powered+Analytics" alt="Crypto Risk Lens" />
 </h1>
 
 <p align="center">
@@ -16,22 +16,22 @@
 </p>
 
 <p align="center">
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-api">API</a> •
-  <a href="#-tech-stack">Tech Stack</a>
+  <a href="#features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#api-endpoints">API</a> •
+  <a href="#tech-stack">Tech Stack</a>
 </p>
 
 ---
 
-## ✨ Features
+## Features
 
 <table>
 <tr>
 <td width="50%">
 
-### 🎯 Risk Assessment
+### Risk Assessment
 - **Multi-Model Ensemble**: Random Forest + XGBoost + HMM
 - **Real-time Analysis**: Live OHLCV data from CoinGecko
 - **Confidence Scoring**: Uncertainty quantification
@@ -40,7 +40,7 @@
 </td>
 <td width="50%">
 
-### 📊 Technical Analysis
+### Technical Analysis
 - **30+ Indicators**: RSI, MACD, Bollinger, ATR, etc.
 - **Volatility Forecasting**: 7-day predictions with CI
 - **Market Clustering**: Behavioral pattern grouping
@@ -51,7 +51,7 @@
 <tr>
 <td width="50%">
 
-### 🧠 Sentiment Analysis
+### Sentiment Analysis
 - **Multi-Source Scraping**: RSS, Reddit, Google News
 - **LLM Processing**: AI-powered sentiment scoring
 - **Fear & Greed Index**: Market emotion tracking
@@ -60,7 +60,7 @@
 </td>
 <td width="50%">
 
-### 🎨 Modern UI
+### Modern UI
 - **Interactive Dashboard**: Real-time visualizations
 - **3D Globe**: Global market overview
 - **Responsive Design**: Mobile-first approach
@@ -72,7 +72,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -103,7 +103,7 @@ cd ../..
 python run_api.py
 ```
 
-🌐 **API Server**: http://localhost:8000
+**API Server**: http://localhost:8000
 
 ### Frontend Setup
 
@@ -118,72 +118,55 @@ npm install
 npm run dev
 ```
 
-🎨 **UI Dashboard**: http://localhost:3000
+**UI Dashboard**: http://localhost:3000
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-```mermaid
-graph TD
-    A[User Request] --> B[FastAPI Backend]
-    B --> C[CoinGecko API]
-    B --> D[News Scrapers]
-    B --> E[Feature Engine]
-    E --> F[30+ Technical Indicators]
-    F --> G[ML Models]
-    G --> H[Risk Classifier]
-    G --> I[Volatility Regressor]
-    G --> J[Market Clustering]
-    G --> K[Regime Detection]
-    H --> L[Probability Blending]
-    I --> L
-    J --> L
-    K --> L
-    L --> M[Risk Score + Confidence]
-    M --> N[React Frontend]
-```
+<p align="center">
+  <img src="https://img.shields.io/badge/Data%20Flow-Live%20Data%20→%20Feature%20Engineering%20→%20ML%20Inference%20→%20Risk%20Score%20→%20Visualization-blue?style=for-the-badge" alt="Data Flow" />
+</p>
 
-### Data Flow
+### Components
 
-```
-📥 Live Data → 🔧 Feature Engineering → 🤖 ML Inference → 📊 Risk Score → 🎨 Visualization
-```
+1. **Data Collection**: Fetch top coins from CoinGecko
+2. **Preprocessing**: Convert to OHLCV format + feature engineering
+3. **Label Generation**: Assign risk labels based on thresholds
+4. **Model Training**: Train ensemble of ML models
+5. **API Inference**: Real-time predictions via FastAPI
+6. **Background Workers**: Sentiment analysis + clustering updates
+7. **Frontend Display**: Interactive visualizations
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 crypto-risk/
-│
-├── 🔧 backend/              # FastAPI application
-│   ├── api/                 # API endpoints & clients
-│   ├── scrapers/            # News & social media scrapers
-│   ├── services/            # LLM & business logic
-│   └── workers/             # Background processing
-│
-├── 🧠 ml/                   # Machine learning pipeline
-│   ├── scripts/             # Training & preprocessing
-│   └── data/                # Training datasets
-│
-├── ⚙️ core/                 # Shared utilities
-│   ├── feature_engine.py    # Technical indicators
-│   ├── coingecko_client.py  # API client
-│   └── models.py            # Data models
-│
-├── 🎨 frontend/             # React + TypeScript UI
+├── backend/              # FastAPI application
+│   ├── api/              # API endpoints & clients
+│   ├── scrapers/         # News & social media scrapers
+│   ├── services/         # LLM & business logic
+│   └── workers/          # Background processing
+├── ml/                   # Machine learning pipeline
+│   ├── scripts/          # Training & preprocessing
+│   └── data/             # Training datasets
+├── core/                 # Shared utilities
+│   ├── feature_engine.py # Technical indicators
+│   ├── coingecko_client.py # API client
+│   └── models.py         # Data models
+├── frontend/             # React + TypeScript UI
 │   └── src/
-│       ├── pages/           # Route components
-│       ├── components/      # Reusable UI components
-│       └── services/        # API integration
-│
-└── 💾 models/               # Trained model artifacts
+│       ├── pages/        # Route components
+│       ├── components/   # Reusable UI components
+│       └── services/     # API integration
+└── models/               # Trained model artifacts
 ```
 
 ---
 
-## 🔌 API Endpoints
+## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -226,7 +209,7 @@ crypto-risk/
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Backend
 - **Framework**: FastAPI 0.104, Uvicorn
@@ -251,7 +234,7 @@ crypto-risk/
 
 ---
 
-## 🔑 Environment Variables
+## Environment Variables
 
 Create a `.env` file in the root directory:
 
@@ -259,17 +242,28 @@ Create a `.env` file in the root directory:
 # CoinGecko API
 COINGECKO_API_KEY=your_coingecko_key
 
-# OpenAI (for LLM sentiment analysis)
-OPENAI_API_KEY=your_openai_key
+# Google API (optional)
+GOOGLE_API_KEY=your_google_key
 
-# Reddit API (optional)
-REDDIT_CLIENT_ID=your_reddit_id
-REDDIT_CLIENT_SECRET=your_reddit_secret
+# API Settings
+API_HOST=0.0.0.0
+API_PORT=8000
+API_RELOAD=true
+
+# Rate Limiting
+RATE_LIMIT_DELAY=1.0
 ```
 
 ---
 
-## 🤖 ML Models
+## ML Models
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Random%20Forest-500%20trees-success?style=flat-square" alt="RF" />
+  <img src="https://img.shields.io/badge/XGBoost-Gradient%20Boosting-orange?style=flat-square" alt="XGB" />
+  <img src="https://img.shields.io/badge/HMM-Regime%20Detection-blue?style=flat-square" alt="HMM" />
+  <img src="https://img.shields.io/badge/K--Means-Clustering-purple?style=flat-square" alt="KMeans" />
+</p>
 
 ### 1. Risk Classifier
 - **Algorithm**: Random Forest (500 trees, depth 20)
@@ -293,7 +287,7 @@ REDDIT_CLIENT_SECRET=your_reddit_secret
 
 ---
 
-## 📊 Technical Indicators
+## Technical Indicators
 
 <details>
 <summary><strong>View All Indicators (30+)</strong></summary>
@@ -333,7 +327,7 @@ REDDIT_CLIENT_SECRET=your_reddit_secret
 
 ---
 
-## 🧪 Training Pipeline
+## Training Pipeline
 
 ```bash
 # Full training pipeline
@@ -352,36 +346,44 @@ python train_regime_model.py     # Train regime detector
 
 ---
 
-## 📈 Workflow
+## Contributors
 
-1. **Data Collection**: Fetch top 50 coins from CoinGecko
-2. **Preprocessing**: Convert to OHLCV format + feature engineering
-3. **Label Generation**: Assign risk labels based on thresholds
-4. **Model Training**: Train ensemble of ML models
-5. **API Inference**: Real-time predictions via FastAPI
-6. **Background Workers**: Sentiment analysis + clustering updates
-7. **Frontend Display**: Interactive visualizations
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/adityajkate">
+        <img src="https://img.shields.io/badge/Aditya%20Kate-Developer-blue?style=for-the-badge" alt="Aditya Kate" />
+      </a>
+    </td>
+    <td align="center">
+      <img src="https://img.shields.io/badge/Tanmay%20Harmalkar-Developer-green?style=for-the-badge" alt="Tanmay Harmalkar" />
+    </td>
+    <td align="center">
+      <img src="https://img.shields.io/badge/Suman%20Manik-Developer-orange?style=for-the-badge" alt="Suman Manik" />
+    </td>
+  </tr>
+</table>
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
 
 ---
 
 <p align="center">
-  <strong>Built with ❤️ by <a href="https://github.com/adityajkate">Aditya Kate</a></strong>
+  <a href="https://github.com/adityajkate/crypto-risk">
+    <img src="https://img.shields.io/github/stars/adityajkate/crypto-risk?style=social" alt="Stars" />
+  </a>
+  <a href="https://github.com/adityajkate/crypto-risk/issues">
+    <img src="https://img.shields.io/github/issues/adityajkate/crypto-risk?style=flat-square" alt="Issues" />
+  </a>
+  <a href="https://github.com/adityajkate/crypto-risk/network/members">
+    <img src="https://img.shields.io/github/forks/adityajkate/crypto-risk?style=social" alt="Forks" />
+  </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/adityajkate/crypto-risk/stargazers">⭐ Star this repo</a> •
-  <a href="https://github.com/adityajkate/crypto-risk/issues">🐛 Report Bug</a> •
-  <a href="https://github.com/adityajkate/crypto-risk/issues">💡 Request Feature</a>
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&duration=3000&pause=1000&color=6366F1&center=true&vCenter=true&width=600&lines=Built+with+precision+and+passion;Empowering+crypto+traders+with+AI;Star+this+repo+if+you+find+it+useful" alt="Footer" />
 </p>
