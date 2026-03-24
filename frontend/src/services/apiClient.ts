@@ -109,33 +109,6 @@ export interface GlobalMarket {
   active_cryptocurrencies: number;
 }
 
-export interface NewsPost {
-  title: string;
-  url: string;
-  published_at: string;
-  source: string;
-  currencies: string[];
-  votes: {
-    positive: number;
-    negative: number;
-  };
-}
-
-export interface SentimentData {
-  currency: string;
-  sentiment_score: number;
-  bullish_count?: number;
-  bearish_count?: number;
-  important_count?: number;
-  positive_count?: number;
-  negative_count?: number;
-  neutral_count?: number;
-  total_posts?: number;
-  total_positive_votes?: number;
-  total_negative_votes?: number;
-  recent_posts?: NewsPost[];
-}
-
 export interface TechnicalIndicators {
   momentum_indicators: {
     rsi_14: number;
@@ -380,12 +353,6 @@ class EnhancedApiClient {
     return this.fetchWithRetry(`/api/v1/global`, { signal });
   }
 
-  async getNews(currencies?: string, filterType: string = 'hot', limit: number = 20, signal?: AbortSignal) {
-    const params = new URLSearchParams({ filter_type: filterType, limit: limit.toString() });
-    if (currencies) params.append('currencies', currencies);
-    return this.fetchWithRetry(`/api/v1/news?${params.toString()}`, { signal });
-  }
-
   async getSentiment(currency: string, signal?: AbortSignal) {
     return this.fetchWithRetry(`/api/v1/sentiment/${currency}`, { signal });
   }
@@ -402,12 +369,21 @@ class EnhancedApiClient {
     return this.fetchWithRetry(`/api/v1/sentiment/${currency}/raw?limit=${limit}`, { signal });
   }
 
+  async getSentimentArticle(currency: string, articleId: string, signal?: AbortSignal) {
+    return this.fetchWithRetry(`/api/v1/sentiment/${currency}/article/${articleId}`, { signal });
+  }
+
   async getSentimentSummary(currency: string, signal?: AbortSignal) {
-    return this.fetchWithRetry(`/api/v1/sentiment/${currency}/summary`, { signal });
+    // LLM summarization can take longer than typical API calls
+    return this.fetchWithRetry(`/api/v1/sentiment/${currency}/summary`, { signal, timeout: 60000 });
   }
 
   async searchCoins(query: string, signal?: AbortSignal) {
     return this.fetchWithRetry(`/api/v1/coins/search?query=${encodeURIComponent(query)}`, { signal });
+  }
+
+  async getTopCoins(limit: number = 20, signal?: AbortSignal) {
+    return this.fetchWithRetry(`/api/v1/coins/top?limit=${limit}`, { signal });
   }
 
   getImageProxyUrl(imageUrl: string): string {

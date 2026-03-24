@@ -28,7 +28,13 @@ htmlcov/
 .claude
 
 # Data directories
-training/data/raw/*.csv
-training/data/processed/*.csv
+ml/data/raw/*.csv
+ml/data/processed/*.csv
+backend/.runtime/
+
+# Model artifacts (large files - regenerate with training scripts)
+models/
+*.joblib
+*.pkl
 
 # Artifacts are already ignored in artifacts/.gitignore

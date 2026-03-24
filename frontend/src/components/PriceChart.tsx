@@ -192,25 +192,40 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
 
   // Live chart - poll real price from backend
   useEffect(() => {
-    if (chartType !== 'live') return;
+    if (chartType !== 'live') {
+      setLiveData([]);
+      return;
+    }
 
-    const initialData: ChartData[] = Array.from({ length: 30 }, (_, i) => ({
-      time: `${i}s`,
-      price: currentPrice
-    }));
+    // Initialize with current price
+    const now = new Date();
+    const initialData: ChartData[] = Array.from({ length: 20 }, (_, i) => {
+      const time = new Date(now.getTime() - (19 - i) * 3000); // 3 seconds apart
+      return {
+        time: time.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }),
+        price: currentPrice
+      };
+    });
     setLiveData(initialData);
 
-    const interval = setInterval(async () => {
+    // Fetch immediately on mount
+    const fetchPrice = async () => {
       try {
         const result = await apiClient.getCoinPrice(coinId);
 
         if (result && result.current_price) {
           const newPrice = result.current_price;
+          const now = new Date();
 
           setLiveData(prev => {
             const newData = [...prev.slice(1)];
             newData.push({
-              time: new Date().toLocaleTimeString('en-US', {
+              time: now.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
@@ -224,9 +239,18 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
       } catch (error) {
         console.error('Failed to fetch live price:', error);
       }
-    }, 10000); // Poll every 10 seconds for live chart
+    };
 
-    return () => clearInterval(interval);
+    // Fetch immediately
+    fetchPrice();
+
+    // Then poll every 3 seconds for smoother updates
+    const interval = setInterval(fetchPrice, 3000);
+
+    return () => {
+      clearInterval(interval);
+      setLiveData([]);
+    };
   }, [chartType, currentPrice, coinId]);
 
   const renderCandlestick = (data: ChartData[]) => {
@@ -432,35 +456,14 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
 
   const renderLiveChart = () => (
     <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={liveData} margin={{ top: 20, right: 40, left: 10, bottom: 30 }}>
+      <AreaChart data={liveData} margin={{ top: 20, right: 40, left: 10, bottom: 20 }}>
         <defs>
           <linearGradient id="colorLive" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-            <stop offset="50%" stopColor="#34d399" stopOpacity={0.2}/>
-            <stop offset="95%" stopColor="#6ee7b7" stopOpacity={0}/>
-          </linearGradient>
-          <linearGradient id="gridGradientLive" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f1f5f9" stopOpacity={0.8}/>
-            <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0.2}/>
-          </linearGradient>
-          <filter id="liveShadow">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#10b981" floodOpacity="0.4"/>
-          </filter>
-          <linearGradient id="pulseGradient" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#10b981" stopOpacity={0.8}>
-              <animate attributeName="stop-opacity" values="0.8;1;0.8" dur="2s" repeatCount="indefinite"/>
-            </stop>
-            <stop offset="100%" stopColor="#34d399" stopOpacity={1}>
-              <animate attributeName="stop-opacity" values="1;0.8;1" dur="2s" repeatCount="indefinite"/>
-            </stop>
+            <stop offset="5%" stopColor="#0d9488" stopOpacity={0.3}/>
+            <stop offset="95%" stopColor="#0d9488" stopOpacity={0}/>
           </linearGradient>
         </defs>
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke="url(#gridGradientLive)"
-          vertical={false}
-          strokeWidth={1}
-        />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
         <XAxis
           dataKey="time"
           stroke="#94a3b8"
@@ -468,7 +471,6 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
           tickLine={false}
           axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
           interval="preserveEnd"
-          minTickGap={60}
           tick={{ fill: '#64748b', fontWeight: 500 }}
         />
         <YAxis
@@ -476,7 +478,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
           fontSize={11}
           tickLine={false}
           axisLine={{ stroke: '#cbd5e1', strokeWidth: 1.5 }}
-          domain={['auto', 'auto']}
+          domain={['dataMin - 0.5', 'dataMax + 0.5']}
           tickFormatter={(v) => {
             if (v >= 1000000) return `$${(v/1000000).toFixed(2)}M`;
             if (v >= 1000) return `$${(v/1000).toFixed(1)}K`;
@@ -489,28 +491,27 @@ const PriceChart: React.FC<PriceChartProps> = ({ coinId, currentPrice }) => {
         <Tooltip
           contentStyle={{
             backgroundColor: 'rgba(255, 255, 255, 0.98)',
-            borderColor: '#10b981',
+            borderColor: '#14b8a6',
             borderRadius: '12px',
-            boxShadow: '0 10px 40px rgba(16, 185, 129, 0.2)',
+            boxShadow: '0 10px 40px rgba(13, 148, 136, 0.15)',
             padding: '12px 16px',
-            border: '1px solid #a7f3d0'
+            border: '1px solid #99f6e4'
           }}
           itemStyle={{ color: '#0f172a', fontSize: '12px', fontWeight: 500 }}
           labelStyle={{ color: '#0f172a', fontWeight: 600, marginBottom: '8px', fontSize: '13px' }}
           formatter={(value: number) => {
             const formatted = value >= 1 ? `$${value.toFixed(2)}` : `$${value.toFixed(6)}`;
-            return [formatted, 'Live Price'];
+            return [formatted, 'Price'];
           }}
         />
         <Area
           type="monotone"
           dataKey="price"
-          stroke="url(#pulseGradient)"
-          strokeWidth={3}
+          stroke="#0d9488"
+          strokeWidth={2.5}
           fillOpacity={1}
           fill="url(#colorLive)"
           isAnimationActive={false}
-          filter="url(#liveShadow)"
           dot={false}
         />
       </AreaChart>

@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=flat-square)
 ![ML](https://img.shields.io/badge/ML-XGBoost%20%7C%20RF%20%7C%20HMM-orange?style=flat-square)
-![Data](https://img.shields.io/badge/Data-CoinGecko%20%7C%20CryptoPanic-purple?style=flat-square)
+![Data](https://img.shields.io/badge/Data-CoinGecko%20%7C%20RSS%20%7C%20Reddit%20%7C%20Google%20News-purple?style=flat-square)
 
 Real-time crypto risk assessment using four ML models in concert. You hit an endpoint with a coin ID, it fetches live candles, runs everything, and returns a risk verdict with full reasoning.
 
@@ -39,7 +39,7 @@ Regime    Cluster    Volatility   Risk RF
 | API | FastAPI + Uvicorn |
 | Features | TA-Lib, pandas, numpy |
 | Models | scikit-learn, XGBoost, hmmlearn, statsmodels |
-| Data | CoinGecko (OHLCV), CryptoPanic (news/sentiment) |
+| Data | CoinGecko (OHLCV), RSS feeds, Google News, Reddit, BitcoinTalk |
 | Artifacts | joblib serialization |
 
 ---
@@ -48,23 +48,32 @@ Regime    Cluster    Volatility   Risk RF
 
 ```
 crypto-risk/
-├── api/
-│   ├── main.py                  # all endpoints
-│   ├── predictor.py             # inference engine
-│   ├── coingecko_realtime.py
-│   └── cryptopanic_client.py
-├── shared/
-│   └── feature_engine.py        # shared between training + API
-├── training/
-│   ├── collect_training_data.py
-│   ├── preprocess.py
-│   ├── label_generator.py
-│   ├── train_risk_classifier.py
-│   ├── train_regression.py
-│   ├── train_clustering.py
-│   ├── train_regime_model.py
-│   └── run_all.py               # runs everything in order
-└── artifacts/                   # saved .joblib models
+├── backend/
+│   ├── api/
+│   │   ├── main.py                  # FastAPI endpoints
+│   │   ├── coingecko_realtime.py    # CoinGecko client
+│   │   └── event_store.py           # In-memory event storage
+│   ├── models/
+│   │   └── predictor.py             # ML inference engine
+│   ├── scrapers/                    # News scrapers (Layer A/B)
+│   ├── workers/                     # Background workers
+│   └── services/                    # LLM summarization
+├── core/
+│   ├── coin_metadata.py             # Coin mapping utilities
+│   ├── coingecko_client.py          # Shared CoinGecko client
+│   └── feature_engine.py            # Feature engineering (TA-Lib)
+├── ml/
+│   ├── collect_training_data.py     # Data collection
+│   ├── preprocess.py                # Data preprocessing
+│   ├── label_generator.py           # Risk label generation
+│   ├── train_risk_classifier.py     # Risk model training
+│   ├── train_regression.py          # Volatility forecasting
+│   ├── train_clustering.py          # Market clustering
+│   ├── train_regime_model.py        # HMM regime detection
+│   └── run_all.py                   # Full training pipeline
+├── models/                          # Trained model artifacts (.joblib)
+├── frontend/                        # React + TypeScript UI
+└── docs/                            # Documentation
 ```
 
 ---
@@ -246,6 +255,49 @@ A prediction is flagged **uncertain** when max confidence < 0.65 or the margin b
 
 ---
 
+## Setup
+
+### Backend
+
+1. **Install Python dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+2. **Configure environment variables:**
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+3. **Train models (first time only):**
+```bash
+cd ml
+python run_all.py
+```
+
+4. **Run the API:**
+```bash
+python run_api.py
+# API runs on http://localhost:8000
+```
+
+### Frontend
+
+1. **Install dependencies:**
+```bash
+cd frontend
+npm install
+```
+
+2. **Run development server:**
+```bash
+npm run dev
+# Frontend runs on http://localhost:3000
+```
+
+---
+
 ## API
 
 | Endpoint | Description |
@@ -256,6 +308,5 @@ A prediction is flagged **uncertain** when max confidence < 0.65 or the margin b
 | `GET /api/v1/batch/analysis` | Up to 10 coins, comma-separated |
 | `GET /api/v1/trending` | Trending from CoinGecko |
 | `GET /api/v1/global` | Global market metrics |
-| `GET /api/v1/news` | CryptoPanic news feed |
 | `GET /api/v1/sentiment/{currency}` | Sentiment per coin |
 | `GET /health` | Health check |

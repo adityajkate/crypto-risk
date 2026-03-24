@@ -5,7 +5,8 @@ import {
   Activity,
   Menu,
   X,
-  Zap
+  Zap,
+  TrendingUp
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -23,6 +24,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const navItems = [
     { path: '/dashboard', label: 'Overview', icon: <LayoutDashboard size={20} /> },
+    { path: '/top-coins', label: 'Top Coins', icon: <TrendingUp size={20} /> },
     { path: '/sentiment', label: 'Sentiment', icon: <Activity size={20} /> },
   ];
 

@@ -1,0 +1,38 @@
+# Python Dependencies for Crypto Risk Lens
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP & Async
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.2
+
+# Machine Learning
+scikit-learn==1.3.2
+xgboost==2.0.3
+hmmlearn==0.3.0
+statsmodels==0.14.1
+joblib==1.3.2
+
+# Technical Analysis
+TA-Lib==0.4.28
+
+# NLP & Sentiment
+transformers==4.36.2
+torch==2.1.2
+sentence-transformers==2.2.2
+
+# Utilities
+python-dotenv==1.0.0
+pytrends==4.9.2
+
+# Optional: For development
+pytest==7.4.3
+pytest-asyncio==0.21.1

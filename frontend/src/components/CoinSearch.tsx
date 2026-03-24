@@ -51,7 +51,7 @@ const CoinSearch: React.FC<CoinSearchProps> = ({ onSelectCoin }) => {
       abortControllerRef.current.abort();
     }
 
-    if (searchTerm.length < 2) {
+    if (searchTerm.length < 1) {
       setSuggestions(POPULAR_COINS);
       return;
     }
@@ -63,8 +63,8 @@ const CoinSearch: React.FC<CoinSearchProps> = ({ onSelectCoin }) => {
       try {
         const result = await apiClient.searchCoins(searchTerm, abortControllerRef.current.signal);
 
-        if (result.success && result.data.coins) {
-          setSuggestions(result.data.coins);
+        if (result.coins) {
+          setSuggestions(result.coins);
         }
       } catch (error: any) {
         if (error?.isAborted !== true && error?.name !== 'AbortError') {
@@ -140,7 +140,7 @@ const CoinSearch: React.FC<CoinSearchProps> = ({ onSelectCoin }) => {
             </div>
           ) : suggestions.length > 0 ? (
             <>
-              {searchTerm.length < 2 && (
+              {searchTerm.length < 1 && (
                 <div className="px-3 py-2 text-xs font-medium text-slate-500 border-b border-slate-100">
                   Popular Cryptocurrencies
                 </div>
