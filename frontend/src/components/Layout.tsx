@@ -32,10 +32,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="min-h-screen relative flex bg-[#F8F9FA] text-slate-900">
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white z-50 flex items-center justify-between px-4 border-b border-slate-200 shadow-sm">
-        <div className="flex items-center gap-2">
-           <Zap className="text-cyan-500" size={24} />
-           <span className="font-semibold text-lg tracking-tight text-slate-900">RiskLens</span>
-        </div>
+        <Link to="/" className="flex items-center gap-3">
+           <Zap className="text-[#0d9488]" size={24} strokeWidth={2.5} fill="currentColor" />
+           <span className="text-xl font-bold tracking-tight text-[#0f172a]">CryptoRisk Lens</span>
+        </Link>
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="p-2 text-slate-700 hover:text-slate-900"
@@ -62,9 +62,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       `}>
         <div className="h-full flex flex-col">
           <div className="h-20 flex items-center px-6 border-b border-slate-200">
-             <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                <Zap className="text-cyan-500" fill="currentColor" size={28} />
-                <span className="font-semibold text-xl tracking-tight text-slate-900">CryptoRisk Lens</span>
+             <Link to="/" className="flex items-center gap-3 group cursor-pointer">
+                <div className="relative">
+                  <Zap
+                    className="text-[#0d9488] transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:rotate-[15deg] group-hover:scale-110"
+                    size={24}
+                    strokeWidth={2.5}
+                    fill="currentColor"
+                  />
+                  <div className="absolute inset-0 bg-[#0d9488] blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-700" />
+                </div>
+                <span className="text-xl font-bold tracking-tight text-[#0f172a]">
+                  CryptoRisk Lens
+                </span>
              </Link>
           </div>
 
