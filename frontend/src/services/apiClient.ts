@@ -374,7 +374,7 @@ class EnhancedApiClient {
   }
 
   async getSentimentSummary(currency: string, signal?: AbortSignal) {
-    // LLM summarization can take longer than typical API calls
+    // NLP summarization can take longer than typical API calls
     return this.fetchWithRetry(`/api/v1/sentiment/${currency}/summary`, { signal, timeout: 60000 });
   }
 
