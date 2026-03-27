@@ -65,10 +65,7 @@ interface SummaryData {
   bearish_percentage: number | null;
   neutral_percentage: number | null;
   recent_articles: Article[];
-  used_fallback?: boolean;
   summary_source?: string;
-  model_used?: string | null;
-  llm_error?: string | null;
 }
 
 interface SentimentCacheSnapshot {
@@ -806,13 +803,8 @@ const SentimentPage: React.FC = () => {
                       <div>
                         <p className="font-semibold text-balance">AI summary unavailable</p>
                         <p className="mt-1 text-amber-800 text-pretty">
-                          The backend did not generate an AI summary for this request. No fallback summary was injected.
+                          The backend did not generate a summary for this request.
                         </p>
-                        {summaryData.llm_error && (
-                          <p className="mt-2 text-xs text-amber-700 text-pretty">
-                            Backend detail: {summaryData.llm_error}
-                          </p>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -840,7 +832,7 @@ const SentimentPage: React.FC = () => {
               {!isUnavailableSummary && summaryData.sentiment && summaryData.confidence !== undefined && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white p-4 rounded-lg card-shadow">
-                      <div className="text-slate-500 text-sm font-medium mb-1">LLM Sentiment</div>
+                      <div className="text-slate-500 text-sm font-medium mb-1">Sentiment Analysis</div>
                       <div className={`text-xl font-bold ${summaryData.sentiment === 'Bullish' || summaryData.sentiment === 'Mixed-Bullish' ? 'text-emerald-600' :
                           summaryData.sentiment === 'Bearish' || summaryData.sentiment === 'Mixed-Bearish' ? 'text-red-600' :
                             'text-slate-600'
