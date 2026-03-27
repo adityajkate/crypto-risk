@@ -931,7 +931,7 @@ async def get_sentiment_summary(currency: str):
     try:
         # Import coin metadata utilities
         from core.coin_metadata import get_sentiment_key
-        from backend.services.llm_summarizer import get_summarizer
+        from backend.services.nlp_summarizer import get_summarizer
 
         # Convert CoinGecko ID to sentiment key
         sentiment_key = get_sentiment_key(currency.lower())
@@ -953,10 +953,7 @@ async def get_sentiment_summary(currency: str):
                 "price_impact": "None",
                 "reasoning": "No data available",
                 "risk_factors": [],
-                "used_fallback": False,
                 "summary_source": "no_data",
-                "model_used": None,
-                "llm_error": None,
             },
             "timestamp": datetime.utcnow().isoformat()
         }
@@ -969,9 +966,9 @@ async def get_sentiment_summary(currency: str):
         layer_a_count = sum(1 for a in articles if a.get("source_type") == "layer_a")
         layer_b_count = sum(1 for a in articles if a.get("source_type") == "layer_b")
 
-        # Use LLM to generate intelligent summary
-        summarizer = get_summarizer(api_key=settings.google_api_key)
-        llm_result = await summarizer.summarize_articles_async(articles, sentiment_key)
+        # Use NLP to generate intelligent summary
+        summarizer = get_summarizer()
+        nlp_result = await summarizer.summarize_articles_async(articles, sentiment_key)
 
         # Get sentiment from coin data (for additional context)
         sentiment_label = None
@@ -988,37 +985,31 @@ async def get_sentiment_summary(currency: str):
             bearish_percentage = metrics.get("bearish_percentage")
             neutral_percentage = metrics.get("neutral_percentage")
 
-        # Override LLM sentiment with CryptoBERT sentiment for consistency
-        # LLM provides summary, but sentiment should match the ML model
-        if sentiment_label:
-            llm_result["sentiment"] = sentiment_label
-            llm_result["confidence"] = int(max(bullish_percentage or 0, bearish_percentage or 0, neutral_percentage or 0))
+        # Use NLP sentiment (more dynamic and based on recent articles)
+        # Keep CryptoBERT sentiment in sentiment_label for reference
 
         return {
             "success": True,
             "data": {
                 "coin": sentiment_key,
-                "summary": llm_result.get("summary"),
+                "summary": nlp_result.get("summary"),
                 "article_count": total_articles,
                 "layer_a_count": layer_a_count,
                 "layer_b_count": layer_b_count,
                 "time_window_hours": 72,
-                "key_insights": llm_result.get("key_insights", []),
-                "sentiment": llm_result.get("sentiment", "Neutral"),  # Now matches CryptoBERT
-                "confidence": llm_result.get("confidence", 0),
-                "price_impact": llm_result.get("price_impact", "None"),
-                "reasoning": llm_result.get("reasoning", ""),
-                "risk_factors": llm_result.get("risk_factors", []),
-                "used_fallback": llm_result.get("used_fallback", False),
-                "summary_source": llm_result.get("summary_source", "llm"),
-                "model_used": llm_result.get("model_used"),
-                "llm_error": llm_result.get("llm_error"),
+                "key_insights": nlp_result.get("key_insights", []),
+                "sentiment": nlp_result.get("sentiment", "Neutral"),
+                "confidence": nlp_result.get("confidence", 0),
+                "price_impact": nlp_result.get("price_impact", "None"),
+                "reasoning": nlp_result.get("reasoning", ""),
+                "risk_factors": nlp_result.get("risk_factors", []),
+                "summary_source": nlp_result.get("summary_source", "nlp"),
                 "sentiment_label": sentiment_label,
                 "unified_score": unified_score,
                 "bullish_percentage": bullish_percentage,
                 "bearish_percentage": bearish_percentage,
                 "neutral_percentage": neutral_percentage,
-                "recent_articles": articles[:5]  # Include 5 most recent articles
+                "recent_articles": articles[:5]
             },
             "timestamp": datetime.utcnow().isoformat()
         }
