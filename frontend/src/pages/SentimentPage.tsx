@@ -398,19 +398,12 @@ const SentimentPage: React.FC = () => {
               <div className="bg-white p-4 rounded-lg card-shadow">
                 <div className="text-slate-500 text-sm font-medium mb-2">Sentiment</div>
                 {sentimentMetrics.sentiment_label ? (
-                  <>
-                    <div className={`text-2xl font-bold font-mono tabular-nums ${sentimentMetrics.sentiment_label === 'Bullish' ? 'text-green-600' :
-                        sentimentMetrics.sentiment_label === 'Bearish' ? 'text-red-600' :
-                          'text-slate-600'
-                      }`}>
-                      {sentimentMetrics.sentiment_label}
-                    </div>
-                    {sentimentMetrics.unified_score !== null && sentimentMetrics.unified_score !== undefined && (
-                      <div className="text-xs text-slate-500 mt-1">
-                        Score: {sentimentMetrics.unified_score.toFixed(2)}
-                      </div>
-                    )}
-                  </>
+                  <div className={`text-2xl font-bold font-mono tabular-nums ${sentimentMetrics.sentiment_label === 'Bullish' ? 'text-green-600' :
+                      sentimentMetrics.sentiment_label === 'Bearish' ? 'text-red-600' :
+                        'text-slate-600'
+                    }`}>
+                    {sentimentMetrics.sentiment_label}
+                  </div>
                 ) : (
                   <div className="text-lg text-slate-400 italic">Analyzing...</div>
                 )}
