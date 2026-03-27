@@ -292,8 +292,8 @@ const MinimalBentoSection: React.FC = () => {
         <div className="mb-12 md:mb-20 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-end">
           <div>
             <h2 className="text-4xl md:text-5xl font-bold tracking-[-0.03em] text-[#0f172a] leading-[1.1]">
-              Powerful analysis.<br />
-              <span className="text-[#0d9488]">Simple design.</span>
+              Smart risk insights.<br />
+              <span className="text-[#0d9488]">Crypto clarity.</span>
             </h2>
           </div>
           <div>
@@ -322,7 +322,7 @@ const MinimalBentoSection: React.FC = () => {
               <div className="mt-8 flex items-center gap-3 flex-wrap text-base font-medium text-[#475569]">
                 <span>Powered by</span>
                 <RotatingText
-                  texts={['XGBoost', 'Random Forest', 'HMM', 'Quantile Regression', 'K-Means', 'PCA']}
+                  texts={['XGBoost', 'HMM', 'Quantile Regression', 'K-Means', 'PCA']}
                   mainClassName="px-4 py-1.5 bg-[#0d9488]/10 text-[#0d9488] text-lg font-bold rounded-lg overflow-hidden"
                   staggerFrom="last"
                   initial={{ y: '100%' }}
