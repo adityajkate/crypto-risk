@@ -9,7 +9,7 @@ class CoinGeckoClient:
     RATE_LIMIT_DELAY = 20.0  # 3 requests per minute (very conservative)
 
     def __init__(self, api_key: Optional[str] = None):
-        # Use API key from environment if not provided
+        # Use API key from environment
         self.api_key = api_key or os.getenv("COINGECKO_API_KEY")
 
         headers = {}
