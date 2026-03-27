@@ -28,6 +28,8 @@ TA-Lib==0.4.28
 transformers==4.36.2
 torch==2.1.2
 sentence-transformers==2.2.2
+spacy==3.7.2
+networkx==3.2.1
 
 # Utilities
 python-dotenv==1.0.0
