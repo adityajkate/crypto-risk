@@ -53,7 +53,8 @@
 
 ### Sentiment Analysis
 - **Multi-Source Scraping**: RSS, Reddit, Google News
-- **LLM Processing**: AI-powered sentiment scoring
+- **CryptoBERT**: Transformer-based sentiment scoring
+- **NLP Summarization**: Extractive text analysis
 - **Fear & Greed Index**: Market emotion tracking
 - **Google Trends**: Search volume correlation
 
@@ -147,7 +148,7 @@ crypto-risk/
 ├── backend/              # FastAPI application
 │   ├── api/              # API endpoints & clients
 │   ├── scrapers/         # News & social media scrapers
-│   ├── services/         # LLM & business logic
+│   ├── services/         # NLP & business logic
 │   └── workers/          # Background processing
 ├── ml/                   # Machine learning pipeline
 │   ├── scripts/          # Training & preprocessing
@@ -228,7 +229,7 @@ crypto-risk/
 
 ### Data Sources
 - **Market Data**: CoinGecko API
-- **Sentiment**: RSS feeds, Reddit API, Google News
+- **Sentiment**: RSS feeds, Reddit API, Google News (CryptoBERT + NLP)
 - **Trends**: Google Trends (pytrends)
 - **Metrics**: Fear & Greed Index
 
@@ -242,8 +243,8 @@ Create a `.env` file in the root directory:
 # CoinGecko API
 COINGECKO_API_KEY=your_coingecko_key
 
-# Google API (optional)
-GOOGLE_API_KEY=your_google_key
+# Google API (optional - only for Google Trends)
+# GOOGLE_API_KEY=your_google_key
 
 # API Settings
 API_HOST=0.0.0.0
