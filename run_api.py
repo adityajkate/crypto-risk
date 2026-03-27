@@ -24,13 +24,12 @@ if __name__ == "__main__":
         f"CoinGecko API: {'Configured' if settings.coingecko_api_key else 'Not configured (using free tier)'}"
     )
 
+    # Google API key is now optional (only used for Google Trends, not summaries)
     google_key = os.getenv("GOOGLE_API_KEY") or settings.google_api_key
     if google_key:
-        print(f"Google Gemini API: Configured ({google_key[:20]}...)")
+        print(f"Google API: Configured for Google Trends ({google_key[:20]}...)")
     else:
-        print(
-            "Google Gemini API: NOT CONFIGURED - summary endpoint will report unavailable"
-        )
+        print("Google API: NOT CONFIGURED - Google Trends will be unavailable")
 
     print("=" * 60)
     print(f"\nAPI will be available at: http://{settings.api_host}:{settings.api_port}")
