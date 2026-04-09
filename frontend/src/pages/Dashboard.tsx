@@ -240,12 +240,6 @@ const Dashboard: React.FC = () => {
                     : 'High volatility, weak liquidity, negative sentiment.'}
                 </p>
               </div>
-              <div className="pt-3 border-t border-slate-200">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Model Confidence</span>
-                  <span className="font-semibold text-slate-900 font-mono">{formatPercentage((analysis?.risk_analysis?.risk_assessment?.confidence || 0) * 100, 0)}</span>
-                </div>
-              </div>
             </div>
           </div>
 

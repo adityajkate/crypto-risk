@@ -1,4 +1,5 @@
 """Fear & Greed Index client for alternative.me API."""
+
 import asyncio
 import httpx
 from typing import Dict, Any, Optional
@@ -58,7 +59,7 @@ class FearGreedClient:
                 "value": value,
                 "value_classification": classification,
                 "timestamp": fng_data["timestamp"],
-                "normalized": normalized
+                "normalized": normalized,
             }
 
             # Update cache
@@ -74,7 +75,7 @@ class FearGreedClient:
                 "value": 50,
                 "value_classification": "Neutral",
                 "timestamp": str(int(datetime.utcnow().timestamp())),
-                "normalized": 0.0
+                "normalized": 0.0,
             }
 
     async def get_historical(self, limit: int = 7) -> list:
@@ -97,12 +98,14 @@ class FearGreedClient:
                 value = int(item["value"])
                 normalized = (value - 50) / 50.0
 
-                historical.append({
-                    "value": value,
-                    "value_classification": item["value_classification"],
-                    "timestamp": item["timestamp"],
-                    "normalized": normalized
-                })
+                historical.append(
+                    {
+                        "value": value,
+                        "value_classification": item["value_classification"],
+                        "timestamp": item["timestamp"],
+                        "normalized": normalized,
+                    }
+                )
 
             return historical
 
@@ -130,7 +133,7 @@ class FearGreedClient:
                     "current": 0.0,
                     "average": 0.0,
                     "trend": "stable",
-                    "change": 0.0
+                    "change": 0.0,
                 }
 
             values = [item["normalized"] for item in historical]
@@ -150,17 +153,12 @@ class FearGreedClient:
                 "current": current,
                 "average": average,
                 "trend": trend,
-                "change": change
+                "change": change,
             }
 
         except Exception as e:
             logger.error(f"Error analyzing Fear & Greed trend: {e}")
-            return {
-                "current": 0.0,
-                "average": 0.0,
-                "trend": "stable",
-                "change": 0.0
-            }
+            return {"current": 0.0, "average": 0.0, "trend": "stable", "change": 0.0}
 
     async def close(self):
         """Close the HTTP client."""

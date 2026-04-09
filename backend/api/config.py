@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     # API Keys
     coingecko_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
-    openrouter_api_key: Optional[str] = None
 
     # API Settings
     api_host: str = "0.0.0.0"

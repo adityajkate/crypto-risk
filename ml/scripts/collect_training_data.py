@@ -3,8 +3,9 @@ from pathlib import Path
 import yfinance as yf
 from datetime import datetime, timedelta
 
+
 class TrainingDataCollector:
-    # Map CoinGecko IDs to Yahoo Finance tickers
+    # Map CoinGecko IDs to Yahoo Finance tikers
     CRYPTO_TICKERS = {
         "bitcoin": "BTC-USD",
         "ethereum": "ETH-USD",
@@ -61,7 +62,9 @@ class TrainingDataCollector:
         "world-liberty-financial": None,
     }
 
-    def __init__(self, output_dir: Path = None, days: int = 1825):  # 5 years = 1825 days
+    def __init__(
+        self, output_dir: Path = None, days: int = 1825
+    ):  # 5 years = 1825 days
         self.output_dir = output_dir or Path(__file__).parent.parent / "data" / "raw"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.days = days
@@ -78,7 +81,9 @@ class TrainingDataCollector:
 
         for i, (coin_id, ticker) in enumerate(self.CRYPTO_TICKERS.items(), 1):
             if ticker is None:
-                print(f"[{i}/{len(self.CRYPTO_TICKERS)}] Skipping {coin_id} (no Yahoo ticker)")
+                print(
+                    f"[{i}/{len(self.CRYPTO_TICKERS)}] Skipping {coin_id} (no Yahoo ticker)"
+                )
                 skipped_count += 1
                 continue
 
@@ -99,14 +104,16 @@ class TrainingDataCollector:
                 df = df.reset_index()
 
                 # Rename columns to match our format
-                df = df.rename(columns={
-                    "Date": "timestamp",
-                    "Open": "open",
-                    "High": "high",
-                    "Low": "low",
-                    "Close": "close",
-                    "Volume": "volume"
-                })
+                df = df.rename(
+                    columns={
+                        "Date": "timestamp",
+                        "Open": "open",
+                        "High": "high",
+                        "Low": "low",
+                        "Close": "close",
+                        "Volume": "volume",
+                    }
+                )
 
                 # Select only needed columns
                 df = df[["timestamp", "open", "high", "low", "close", "volume"]]
@@ -135,9 +142,11 @@ class TrainingDataCollector:
         print(f"Completed: {success_count} fetched, {skipped_count} skipped")
         print(f"{'='*60}")
 
+
 def main():
     collector = TrainingDataCollector()
     collector.collect()
+
 
 if __name__ == "__main__":
     main()
