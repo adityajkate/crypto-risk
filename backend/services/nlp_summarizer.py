@@ -1,245 +1,153 @@
 """
-Production-Grade NLP Summarizer - NO FALLBACKS
-All dependencies are REQUIRED for production quality.
-Uses: spaCy, sentence-transformers, scikit-learn, networkx
+Enhanced Production NLP Summarizer for FastAPI
+
+Drop-in replacement for a crypto/news article summarizer.
+
+Core NLP stack:
+- spaCy: sentence segmentation, NER, noun chunks, token filtering
+- Sentence-Transformers: semantic embeddings, semantic deduplication, title relevance
+- scikit-learn: TF-IDF n-grams, cosine similarity, optional clustering
+- NetworkX: TextRank/PageRank over a semantic sentence graph
+- MMR: diverse sentence selection so the summary does not repeat the same story
+
+Expected article shape:
+{
+    "title": str,
+    "full_content" | "summary" | "text": str,
+    "url": str optional,
+    "source": str optional,
+    "published_at" | "timestamp" | "date": str/int optional,
+    "engagement_count": int optional,
+    "sentiment": {"label": "Bullish|Bearish|Neutral", "confidence": 0.0-1.0 or 0-100} optional
+}
 """
 
-import re
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import html
 import logging
-from typing import List, Dict, Any
-from collections import Counter
+import math
+import re
+import unicodedata
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from urllib.parse import urlparse
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# REQUIRED imports - no fallbacks, fail fast
 try:
     import spacy
-    from spacy.tokens import Doc
-except ImportError:
+except ImportError as exc:
     raise ImportError(
-        "spaCy is REQUIRED. Install: pip install spacy && python -m spacy download en_core_web_sm"
-    )
+        "spaCy is required. Install with: pip install spacy && "
+        "python -m spacy download en_core_web_sm"
+    ) from exc
 
 try:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
-except ImportError:
-    raise ImportError("scikit-learn is REQUIRED. Install: pip install scikit-learn")
+except ImportError as exc:
+    raise ImportError(
+        "scikit-learn is required. Install with: pip install scikit-learn"
+    ) from exc
 
 try:
     from sentence_transformers import SentenceTransformer
-except ImportError:
+except ImportError as exc:
     raise ImportError(
-        "sentence-transformers is REQUIRED. Install: pip install sentence-transformers"
-    )
+        "sentence-transformers is required. Install with: pip install sentence-transformers"
+    ) from exc
 
 try:
     import networkx as nx
-except ImportError:
-    raise ImportError("networkx is REQUIRED. Install: pip install networkx")
+except ImportError as exc:
+    raise ImportError(
+        "networkx is required. Install with: pip install networkx"
+    ) from exc
 
 
-class ProductionNLPSummarizer:
+@dataclass(slots=True)
+class ArticleDoc:
+    index: int
+    title: str
+    body: str
+    text: str
+    source: str = "unknown"
+    url: str = ""
+    published_at: Optional[datetime] = None
+    engagement: float = 0.0
+    sentiment_label: str = "Neutral"
+    sentiment_confidence: float = 0.55
+    quality: float = 0.5
+
+
+@dataclass(slots=True)
+class SentenceCandidate:
+    text: str
+    article_index: int
+    sentence_index: int
+    sentence_count: int
+    source: str
+    title: str
+    published_at: Optional[datetime]
+    engagement: float
+    article_quality: float
+    score: float = 0.0
+    score_parts: Dict[str, float] = field(default_factory=dict)
+
+
+class EnhancedNLPSummarizer:
     """
-    Production-grade NLP summarizer with NO fallbacks.
-    All advanced techniques are REQUIRED:
-    - Sentence-BERT embeddings (semantic similarity)
-    - TextRank algorithm (graph-based ranking)
-    - TF-IDF with n-grams (keyword extraction)
-    - Multi-factor sentence scoring
-    - Context-aware risk detection
+    Higher-quality NLP summarizer designed for FastAPI responses.
+
+    Improvements over the earlier version:
+    - fixes quote normalization and text cleaning
+    - deduplicates articles before scoring
+    - uses all scoring functions in the summary path
+    - uses MMR to reduce repetition
+    - considers more than only the first two sentences
+    - adds source/recency/engagement weighting
+    - makes risk, sentiment, and price impact more explainable
     """
 
-    def __init__(self):
-        """Initialize with all required models."""
-        logger.info("Initializing Production NLP Summarizer (NO FALLBACKS)...")
+    def __init__(
+        self,
+        spacy_model: str = "en_core_web_sm",
+        sentence_model: str = "all-MiniLM-L6-v2",
+        max_articles: int = 80,
+        max_sentences_per_article: int = 8,
+    ) -> None:
+        logger.info("Initializing Enhanced NLP Summarizer...")
 
-        # Load spaCy - REQUIRED
         try:
-            self.nlp = spacy.load("en_core_web_sm")
-            logger.info("✓ spaCy model loaded")
-        except OSError:
+            # Parser + NER are useful; keep the full model enabled.
+            self.nlp = spacy.load(spacy_model)
+        except OSError as exc:
             raise RuntimeError(
-                "spaCy model 'en_core_web_sm' not found. "
-                "Download: python -m spacy download en_core_web_sm"
-            )
+                f"spaCy model '{spacy_model}' not found. Run: python -m spacy download {spacy_model}"
+            ) from exc
 
-        # Load Sentence-BERT - REQUIRED
         try:
-            self.sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
-            logger.info("✓ Sentence-BERT model loaded (semantic embeddings enabled)")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load Sentence-BERT model: {e}")
+            self.sentence_model = SentenceTransformer(sentence_model)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not load SentenceTransformer model '{sentence_model}': {exc}"
+            ) from exc
 
-        # Advanced keyword dictionaries with context
-        self.risk_patterns = {
-            "critical": {
-                "keywords": [
-                    "hack",
-                    "exploit",
-                    "vulnerability",
-                    "breach",
-                    "scam",
-                    "fraud",
-                    "collapse",
-                    "bankrupt",
-                    "insolvent",
-                    "rugpull",
-                    "stolen",
-                    "compromised",
-                    "attack",
-                    "malware",
-                ],
-                "weight": 1.0,
-                "context": ["security", "funds", "wallet", "exchange", "protocol"],
-            },
-            "high": {
-                "keywords": [
-                    "lawsuit",
-                    "regulation",
-                    "ban",
-                    "investigation",
-                    "sec",
-                    "cftc",
-                    "delisting",
-                    "suspension",
-                    "halt",
-                    "probe",
-                    "enforcement",
-                    "penalty",
-                    "fine",
-                    "sanction",
-                ],
-                "weight": 0.85,
-                "context": [
-                    "regulatory",
-                    "legal",
-                    "compliance",
-                    "government",
-                    "authority",
-                ],
-            },
-            "medium": {
-                "keywords": [
-                    "volatility",
-                    "uncertain",
-                    "concern",
-                    "warning",
-                    "risk",
-                    "delay",
-                    "issue",
-                    "problem",
-                    "controversy",
-                    "dispute",
-                    "challenge",
-                    "obstacle",
-                ],
-                "weight": 0.6,
-                "context": ["market", "price", "trading", "volume"],
-            },
-        }
+        self.max_articles = max_articles
+        self.max_sentences_per_article = max_sentences_per_article
 
-        self.positive_indicators = {
-            "major": {
-                "keywords": [
-                    "partnership",
-                    "acquisition",
-                    "merger",
-                    "listing",
-                    "mainnet",
-                    "breakthrough",
-                    "adoption",
-                    "institutional",
-                    "integration",
-                    "milestone",
-                    "record",
-                    "historic",
-                ],
-                "weight": 1.0,
-            },
-            "moderate": {
-                "keywords": [
-                    "upgrade",
-                    "launch",
-                    "growth",
-                    "expansion",
-                    "rally",
-                    "surge",
-                    "increase",
-                    "development",
-                    "improvement",
-                ],
-                "weight": 0.7,
-            },
-        }
-
-        # Price impact indicators
-        self.price_impact_signals = {
-            "high": {
-                "keywords": [
-                    "major",
-                    "significant",
-                    "massive",
-                    "huge",
-                    "dramatic",
-                    "unprecedented",
-                    "historic",
-                    "record",
-                    "breakthrough",
-                    "revolutionary",
-                    "game-changing",
-                ],
-                "events": [
-                    "partnership",
-                    "acquisition",
-                    "listing",
-                    "hack",
-                    "exploit",
-                    "regulation",
-                    "ban",
-                    "mainnet",
-                    "etf",
-                    "institutional",
-                ],
-                "threshold": 6.0,
-            },
-            "medium": {
-                "keywords": [
-                    "notable",
-                    "considerable",
-                    "substantial",
-                    "important",
-                    "meaningful",
-                    "significant",
-                ],
-                "events": [
-                    "upgrade",
-                    "launch",
-                    "integration",
-                    "delay",
-                    "investigation",
-                ],
-                "threshold": 3.0,
-            },
-            "low": {
-                "keywords": [
-                    "slight",
-                    "minor",
-                    "small",
-                    "modest",
-                    "gradual",
-                    "incremental",
-                ],
-                "events": [],
-                "threshold": 1.0,
-            },
-        }
-
-        # Crypto-specific terminology
-        self.crypto_terms = [
+        self.crypto_terms = {
             "bitcoin",
+            "btc",
             "ethereum",
+            "eth",
             "crypto",
             "cryptocurrency",
             "blockchain",
@@ -256,7 +164,6 @@ class ProductionNLPSummarizer:
             "dapp",
             "web3",
             "layer",
-            "consensus",
             "validator",
             "node",
             "hash",
@@ -267,868 +174,1613 @@ class ProductionNLPSummarizer:
             "apy",
             "tvl",
             "market cap",
+            "stablecoin",
+            "etf",
+            "dao",
+            "dex",
+            "cex",
+            "airdrop",
+            "halving",
+            "mainnet",
+            "testnet",
+        }
+
+        self.boilerplate_patterns = [
+            r"strict editorial policy",
+            r"focuses on accuracy",
+            r"subscribe to (?:our|the) newsletter",
+            r"follow us on",
+            r"click here to",
+            r"terms and conditions",
+            r"privacy policy",
+            r"not financial advice",
+            r"sponsored content",
+            r"affiliate disclosure",
+            r"all rights reserved",
+            r"read more",
+            r"share this article",
+            r"advertisement",
         ]
 
-        logger.info("✓ Production NLP Summarizer initialized (all models loaded)")
+        self.risk_patterns: Dict[str, Dict[str, Any]] = {
+            "critical": {
+                "weight": 1.0,
+                "keywords": [
+                    "hack",
+                    "hacked",
+                    "exploit",
+                    "vulnerability",
+                    "breach",
+                    "scam",
+                    "fraud",
+                    "rug pull",
+                    "rugpull",
+                    "stolen",
+                    "compromised",
+                    "attack",
+                    "malware",
+                    "phishing",
+                    "insolvent",
+                    "bankrupt",
+                    "collapse",
+                ],
+                "context": [
+                    "wallet",
+                    "fund",
+                    "exchange",
+                    "protocol",
+                    "bridge",
+                    "security",
+                    "user",
+                ],
+            },
+            "high": {
+                "weight": 0.78,
+                "keywords": [
+                    "lawsuit",
+                    "regulation",
+                    "ban",
+                    "investigation",
+                    "sec",
+                    "cftc",
+                    "doj",
+                    "enforcement",
+                    "fine",
+                    "penalty",
+                    "sanction",
+                    "delisting",
+                    "suspension",
+                    "trading halt",
+                    "probe",
+                    "settlement",
+                ],
+                "context": [
+                    "regulatory",
+                    "legal",
+                    "government",
+                    "court",
+                    "compliance",
+                    "authority",
+                ],
+            },
+            "medium": {
+                "weight": 0.52,
+                "keywords": [
+                    "volatility",
+                    "uncertain",
+                    "warning",
+                    "risk",
+                    "delay",
+                    "issue",
+                    "controversy",
+                    "dispute",
+                    "outflow",
+                    "sell-off",
+                    "liquidation",
+                    "resistance",
+                    "support",
+                    "correction",
+                    "slump",
+                ],
+                "context": [
+                    "market",
+                    "price",
+                    "trading",
+                    "volume",
+                    "investor",
+                    "token",
+                ],
+            },
+        }
 
-    def _clean_text(self, text: str) -> str:
-        """Advanced text cleaning with preservation of important punctuation."""
-        if not text:
+        self.positive_events = {
+            "partnership",
+            "acquisition",
+            "merger",
+            "listing",
+            "mainnet",
+            "upgrade",
+            "integration",
+            "adoption",
+            "institutional",
+            "approval",
+            "record",
+            "milestone",
+            "launch",
+            "breakthrough",
+            "rally",
+            "surge",
+            "inflow",
+            "funding",
+        }
+        self.negative_events = {
+            "hack",
+            "exploit",
+            "lawsuit",
+            "ban",
+            "delisting",
+            "outflow",
+            "sell-off",
+            "liquidation",
+            "bankruptcy",
+            "insolvent",
+            "probe",
+            "fine",
+            "penalty",
+            "halt",
+            "vulnerability",
+            "breach",
+        }
+        self.bullish_lexicon = {
+            "surge",
+            "rally",
+            "gain",
+            "gains",
+            "bullish",
+            "breakout",
+            "approval",
+            "adoption",
+            "growth",
+            "record",
+            "inflow",
+            "accumulate",
+            "accumulation",
+            "partnership",
+            "launch",
+            "upgrade",
+            "positive",
+            "buy",
+            "rebound",
+            "recover",
+        }
+        self.bearish_lexicon = {
+            "drop",
+            "fall",
+            "falls",
+            "plunge",
+            "slump",
+            "bearish",
+            "sell-off",
+            "outflow",
+            "liquidation",
+            "hack",
+            "lawsuit",
+            "ban",
+            "fine",
+            "penalty",
+            "negative",
+            "risk",
+            "warning",
+            "delay",
+            "exploit",
+            "breach",
+            "crash",
+        }
+
+        logger.info("Enhanced NLP Summarizer initialized")
+
+    # ---------------------------------------------------------------------
+    # Public API
+    # ---------------------------------------------------------------------
+
+    def summarize_articles(
+        self,
+        articles: List[Dict[str, Any]],
+        coin: str,
+        max_summary_sentences: int = 4,
+        max_summary_chars: int = 650,
+    ) -> Dict[str, Any]:
+        """Generate frontend-ready JSON from a list of article dictionaries."""
+        if not articles:
+            raise ValueError(f"No articles provided for {coin}")
+
+        article_docs = self._prepare_articles(articles, coin=coin)
+        if not article_docs:
+            raise ValueError(f"No usable article text found for {coin}")
+
+        candidates = self._collect_candidates(article_docs, coin=coin)
+        if not candidates:
+            raise ValueError(f"No usable summary sentences found for {coin}")
+
+        scored_candidates, embeddings, clusters = self._score_candidates(
+            candidates, coin=coin
+        )
+        selected = self._select_summary_sentences(
+            scored_candidates,
+            embeddings,
+            max_sentences=max_summary_sentences,
+        )
+        summary = self._render_summary(selected, max_chars=max_summary_chars)
+
+        combined_text = " ".join(
+            doc.text for doc in article_docs[: min(50, len(article_docs))]
+        )
+        sentiment = self._aggregate_sentiment(article_docs)
+        key_insights = self._extract_key_phrases(
+            combined_text, coin=coin, max_phrases=8
+        )
+        risk_factors, risk_details = self._detect_risks(combined_text, article_docs)
+        price_impact, impact_score = self._assess_price_impact(
+            combined_text, sentiment, article_docs, risk_details
+        )
+        topics = self._build_topics(
+            candidates, clusters, scored_candidates, max_topics=5
+        )
+        reasoning = self._build_reasoning(
+            sentiment=sentiment,
+            price_impact=price_impact,
+            impact_score=impact_score,
+            article_count=len(article_docs),
+            candidates=len(candidates),
+            selected=selected,
+        )
+
+        return {
+            "summary": summary,
+            "sentiment": sentiment["label"],
+            "confidence": sentiment["confidence"],
+            "sentiment_breakdown": {
+                "bullish_pct": sentiment["bullish_pct"],
+                "bearish_pct": sentiment["bearish_pct"],
+                "neutral_pct": sentiment["neutral_pct"],
+            },
+            "key_insights": key_insights,
+            "topics": topics,
+            "price_impact": price_impact,
+            "price_impact_score": round(float(impact_score), 2),
+            "reasoning": reasoning,
+            "risk_factors": risk_factors,
+            "risk_details": risk_details,
+            "used_fallback": False,
+            "summary_source": "enhanced_nlp_extractive_semantic",
+            "model_used": "spacy_sbert_tfidf_textrank_mmr_ner",
+            "llm_error": None,
+            "metadata": {
+                "input_articles": len(articles),
+                "articles_used_after_dedup": len(article_docs),
+                "candidate_sentences": len(candidates),
+                "summary_sentences": len(selected),
+                "sources_used": sorted(
+                    {doc.source for doc in article_docs if doc.source}
+                ),
+            },
+        }
+
+    async def summarize_articles_async(
+        self,
+        articles: List[Dict[str, Any]],
+        coin: str,
+        max_summary_sentences: int = 4,
+        max_summary_chars: int = 650,
+    ) -> Dict[str, Any]:
+        """Async wrapper for FastAPI endpoints."""
+        return await asyncio.to_thread(
+            self.summarize_articles,
+            articles,
+            coin,
+            max_summary_sentences,
+            max_summary_chars,
+        )
+
+    # ---------------------------------------------------------------------
+    # Article preparation
+    # ---------------------------------------------------------------------
+
+    def _prepare_articles(
+        self, articles: List[Dict[str, Any]], coin: str
+    ) -> List[ArticleDoc]:
+        prepared: List[ArticleDoc] = []
+
+        for idx, article in enumerate(articles[: self.max_articles * 2]):
+            title = self._clean_text(str(article.get("title") or ""))
+            body = self._article_body(article)
+            body = self._clean_text(body)
+            if len(body) < 80 and len(title) < 20:
+                continue
+
+            source = (
+                str(
+                    article.get("source") or article.get("publisher") or "unknown"
+                ).strip()
+                or "unknown"
+            )
+            url = str(article.get("url") or article.get("link") or "").strip()
+            published_at = self._parse_datetime(
+                article.get("published_at")
+                or article.get("timestamp")
+                or article.get("date")
+            )
+            engagement = self._safe_float(
+                article.get("engagement_count") or article.get("engagement") or 0.0
+            )
+            sent_label, sent_conf = self._article_sentiment(article, f"{title} {body}")
+
+            text = f"{title}. {body}" if title and title not in body[:150] else body
+            quality = self._article_quality(
+                title=title,
+                body=body,
+                source=source,
+                published_at=published_at,
+                engagement=engagement,
+            )
+
+            prepared.append(
+                ArticleDoc(
+                    index=idx,
+                    title=title,
+                    body=body,
+                    text=text,
+                    source=source,
+                    url=url,
+                    published_at=published_at,
+                    engagement=engagement,
+                    sentiment_label=sent_label,
+                    sentiment_confidence=sent_conf,
+                    quality=quality,
+                )
+            )
+
+        deduped = self._deduplicate_articles(prepared)
+        deduped.sort(key=self._article_sort_key, reverse=True)
+        return deduped[: self.max_articles]
+
+    @staticmethod
+    def _article_body(article: Dict[str, Any]) -> str:
+        for key in (
+            "full_content",
+            "content",
+            "body",
+            "summary",
+            "description",
+            "text",
+        ):
+            value = article.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        return ""
+
+    def _deduplicate_articles(self, docs: List[ArticleDoc]) -> List[ArticleDoc]:
+        seen_keys: set[str] = set()
+        seen_title_tokens: List[set[str]] = []
+        result: List[ArticleDoc] = []
+
+        for doc in docs:
+            url_key = self._canonical_url_key(doc.url)
+            title_key = (
+                self._stable_hash(self._normalize_for_key(doc.title))
+                if doc.title
+                else ""
+            )
+            content_key = self._stable_hash(self._normalize_for_key(doc.text[:500]))
+            exact_key = url_key or title_key or content_key
+
+            if exact_key and exact_key in seen_keys:
+                continue
+
+            title_tokens = self._token_set(doc.title)
+            near_duplicate = False
+            if title_tokens:
+                for old_tokens in seen_title_tokens[-200:]:
+                    if self._jaccard(title_tokens, old_tokens) >= 0.88:
+                        near_duplicate = True
+                        break
+            if near_duplicate:
+                continue
+
+            if exact_key:
+                seen_keys.add(exact_key)
+            if title_tokens:
+                seen_title_tokens.append(title_tokens)
+            result.append(doc)
+
+        return result
+
+    @staticmethod
+    def _article_sort_key(doc: ArticleDoc) -> Tuple[float, float, float]:
+        timestamp = doc.published_at.timestamp() if doc.published_at else 0.0
+        return (doc.quality, timestamp, doc.engagement)
+
+    @staticmethod
+    def _canonical_url_key(url: str) -> str:
+        if not url:
+            return ""
+        try:
+            parsed = urlparse(url)
+            host = parsed.netloc.lower().replace("www.", "")
+            path = re.sub(r"/$", "", parsed.path.lower())
+            return f"{host}{path}"
+        except Exception:
             return ""
 
-        # Remove HTML tags
-        text = re.sub(r"<[^>]+>", " ", text)
-        # Remove URLs but keep domain names
-        text = re.sub(r"https?://(?:www\.)?([^\s/]+)", r"\1", text)
-        # Remove email addresses
-        text = re.sub(r"\S+@\S+", "", text)
-        # Normalize quotes
-        text = (
-            text.replace('"', '"').replace('"', '"').replace(""", "'").replace(""", "'")
-        )
-        # Remove excessive punctuation
-        text = re.sub(r"([!?.]){2,}", r"\1", text)
-        # Normalize whitespace
-        text = re.sub(r"\s+", " ", text)
-        return text.strip()
+    # ---------------------------------------------------------------------
+    # Candidate collection and filtering
+    # ---------------------------------------------------------------------
+
+    def _collect_candidates(
+        self, docs: List[ArticleDoc], coin: str
+    ) -> List[SentenceCandidate]:
+        candidates: List[SentenceCandidate] = []
+
+        for doc in docs:
+            sentences = self._extract_sentences(doc.body or doc.text)
+            if not sentences:
+                continue
+
+            kept_for_article = 0
+            for sent_idx, sentence in enumerate(sentences):
+                if kept_for_article >= self.max_sentences_per_article:
+                    break
+                cleaned = self._clean_sentence(sentence)
+                if self._is_bad_sentence(cleaned, coin=coin):
+                    continue
+                candidates.append(
+                    SentenceCandidate(
+                        text=cleaned,
+                        article_index=doc.index,
+                        sentence_index=sent_idx,
+                        sentence_count=len(sentences),
+                        source=doc.source,
+                        title=doc.title,
+                        published_at=doc.published_at,
+                        engagement=doc.engagement,
+                        article_quality=doc.quality,
+                    )
+                )
+                kept_for_article += 1
+
+        # Remove duplicate or near-exact duplicate sentences before expensive scoring.
+        unique: List[SentenceCandidate] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = self._stable_hash(self._normalize_for_key(candidate.text))
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(candidate)
+        return unique
 
     def _extract_sentences(self, text: str) -> List[str]:
-        """Extract high-quality sentences using spaCy."""
-        doc = self.nlp(text[:100000])  # Limit to prevent memory issues
-        sentences = []
+        if not text:
+            return []
+        doc = self.nlp(text[:120_000])
+        return [sent.text.strip() for sent in doc.sents if sent.text.strip()]
 
-        for sent in doc.sents:
-            sent_text = sent.text.strip()
-            words = sent_text.split()
+    def _is_bad_sentence(self, sentence: str, coin: str = "") -> bool:
+        if not sentence:
+            return True
 
-            # Quality filters
-            if (
-                len(sent_text) >= 40
-                and len(words) >= 6
-                and len(sent_text) <= 500
-                and not sent_text.startswith(("http", "www", "@"))
-                and any(c.isalpha() for c in sent_text)
-            ):
-                sentences.append(sent_text)
+        lower = sentence.lower()
+        words = re.findall(r"[a-zA-Z0-9$%]+", sentence)
 
-        return sentences
+        if len(sentence) < 45 or len(sentence) > 420:
+            return True
+        if len(words) < 7:
+            return True
+        if lower.endswith("?"):
+            return True
+        if re.search(
+            r"(?:lorem ipsum|consectetur adipiscing|morbi pretium|aliquam mollis)",
+            lower,
+        ):
+            return True
+        if any(re.search(pattern, lower) for pattern in self.boilerplate_patterns):
+            return True
+        if lower.count("|") >= 2 or lower.count("/") >= 6:
+            return True
+        if self._uppercase_ratio(sentence) > 0.45:
+            return True
+        if len(set(words)) / max(len(words), 1) < 0.42:
+            return True
 
-    def _calculate_textrank_scores(self, sentences: List[str]) -> Dict[str, float]:
-        """Calculate sentence importance using TextRank with Sentence-BERT embeddings."""
-        if not sentences:
-            raise ValueError("No sentences provided for TextRank")
+        # Keep finance/crypto/asset sentences, but don't be too strict.
+        coin_lower = coin.lower().strip()
+        coin_terms = (
+            {coin_lower, coin_lower.replace(" ", ""), coin_lower.upper()}
+            if coin_lower
+            else set()
+        )
+        finance_signals = {
+            "price",
+            "market",
+            "trading",
+            "investor",
+            "fund",
+            "shares",
+            "stock",
+            "exchange",
+            "volume",
+            "rally",
+            "drop",
+            "gain",
+            "loss",
+            "token",
+            "coin",
+            "blockchain",
+            "crypto",
+            "etf",
+            "rate",
+            "yield",
+            "liquidity",
+            "wallet",
+            "protocol",
+        }
+        if not any(
+            term in lower
+            for term in self.crypto_terms
+            | finance_signals
+            | {t for t in coin_terms if t}
+        ):
+            # This is a soft content quality gate. It removes generic site text.
+            return True
 
+        return False
+
+    # ---------------------------------------------------------------------
+    # Scoring
+    # ---------------------------------------------------------------------
+
+    def _score_candidates(
+        self,
+        candidates: List[SentenceCandidate],
+        coin: str,
+    ) -> Tuple[List[SentenceCandidate], np.ndarray, Dict[int, int]]:
+        texts = [candidate.text for candidate in candidates]
+        embeddings = self._encode(texts)
+
+        textrank_scores = self._textrank_scores(embeddings)
+        tfidf_scores = self._tfidf_scores(texts)
+        title_scores = self._title_similarity_scores(candidates, embeddings)
+        relevance_scores = self._coin_relevance_scores(texts, coin)
+        entity_scores = self._entity_number_scores(texts)
+        position_scores = self._position_scores(candidates)
+        article_scores = self._article_weight_scores(candidates)
+        novelty_scores = self._novelty_scores(embeddings)
+
+        for i, candidate in enumerate(candidates):
+            parts = {
+                "textrank": textrank_scores[i],
+                "tfidf": tfidf_scores[i],
+                "title_similarity": title_scores[i],
+                "coin_relevance": relevance_scores[i],
+                "entity_number": entity_scores[i],
+                "position": position_scores[i],
+                "article_quality": article_scores[i],
+                "novelty": novelty_scores[i],
+            }
+            candidate.score_parts = parts
+            candidate.score = float(
+                0.27 * parts["textrank"]
+                + 0.20 * parts["tfidf"]
+                + 0.13 * parts["title_similarity"]
+                + 0.12 * parts["position"]
+                + 0.10 * parts["entity_number"]
+                + 0.08 * parts["coin_relevance"]
+                + 0.07 * parts["article_quality"]
+                + 0.03 * parts["novelty"]
+            )
+
+        clusters = self._cluster_candidates(embeddings, max_clusters=6)
+        scored_candidates = list(candidates)
+        scored_candidates.sort(key=lambda c: c.score, reverse=True)
+        return scored_candidates, embeddings, clusters
+
+    def _encode(self, texts: Sequence[str]) -> np.ndarray:
+        if not texts:
+            return np.empty((0, 0), dtype=np.float32)
         try:
-            # Use Sentence-BERT for semantic similarity (REQUIRED)
-            embeddings = self.sentence_model.encode(sentences, show_progress_bar=False)
-            similarity_matrix = cosine_similarity(embeddings)
+            embeddings = self.sentence_model.encode(
+                list(texts),
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+            )
+        except TypeError:
+            embeddings = self.sentence_model.encode(
+                list(texts), show_progress_bar=False, convert_to_numpy=True
+            )
+            embeddings = self._l2_normalize(np.asarray(embeddings))
+        return np.asarray(embeddings, dtype=np.float32)
 
-            # Add small epsilon to diagonal to ensure convergence
-            np.fill_diagonal(similarity_matrix, similarity_matrix.diagonal() + 1e-8)
+    @staticmethod
+    def _l2_normalize(matrix: np.ndarray) -> np.ndarray:
+        norm = np.linalg.norm(matrix, axis=1, keepdims=True)
+        norm[norm == 0] = 1.0
+        return matrix / norm
 
-            # Ensure matrix is not too sparse - add minimum similarity threshold
-            threshold = 0.1
-            similarity_matrix[similarity_matrix < threshold] = 0
+    def _textrank_scores(self, embeddings: np.ndarray) -> List[float]:
+        n = len(embeddings)
+        if n == 0:
+            return []
+        if n == 1:
+            return [1.0]
 
-            # Build graph
-            nx_graph = nx.from_numpy_array(similarity_matrix)
+        sim = cosine_similarity(embeddings)
+        sim = np.maximum(sim, 0.0)
+        np.fill_diagonal(sim, 0.0)
+        sim[sim < 0.18] = 0.0
 
-            # Apply PageRank algorithm with more iterations and better tolerance
-            scores = nx.pagerank(nx_graph, max_iter=200, tol=1e-7, alpha=0.85)
+        if float(sim.sum()) == 0.0:
+            return [1.0] * n
 
-            # Map scores back to sentences
-            return {sent: scores[i] for i, sent in enumerate(sentences)}
+        graph = nx.from_numpy_array(sim)
+        try:
+            ranks = nx.pagerank(
+                graph, alpha=0.85, max_iter=200, tol=1e-7, weight="weight"
+            )
+            scores = np.array([ranks.get(i, 0.0) for i in range(n)], dtype=np.float32)
+        except nx.PowerIterationFailedConvergence:
+            scores = sim.mean(axis=1)
 
-        except Exception as e:
-            logger.warning(f"TextRank failed: {e}, using uniform scores")
-            # If PageRank fails, return uniform scores (all sentences equal)
-            return {sent: 1.0 / len(sentences) for sent in sentences}
+        return self._normalize(scores).tolist()
 
-    def _calculate_tfidf_scores(self, sentences: List[str]) -> Dict[str, float]:
-        """Calculate TF-IDF based importance scores."""
-        if not sentences:
-            raise ValueError("No sentences provided for TF-IDF")
+    def _tfidf_scores(self, texts: Sequence[str]) -> List[float]:
+        if not texts:
+            return []
+        if len(texts) == 1:
+            return [1.0]
 
         vectorizer = TfidfVectorizer(
             stop_words="english",
-            max_features=300,
-            ngram_range=(1, 3),  # Include trigrams
+            ngram_range=(1, 3),
+            max_features=1_200,
             min_df=1,
-            max_df=0.85,
+            max_df=0.88,
+            sublinear_tf=True,
         )
+        try:
+            matrix = vectorizer.fit_transform(texts)
+            # Sum captures informative terms; mean avoids favoring long sentences too much.
+            summed = np.asarray(matrix.sum(axis=1)).ravel()
+            density = np.asarray((matrix > 0).sum(axis=1)).ravel()
+            scores = summed / np.maximum(np.sqrt(density), 1.0)
+        except ValueError:
+            scores = np.ones(len(texts), dtype=np.float32)
+        return self._normalize(scores).tolist()
 
-        tfidf_matrix = vectorizer.fit_transform(sentences)
-        scores = np.asarray(tfidf_matrix.sum(axis=1)).flatten()
+    def _title_similarity_scores(
+        self, candidates: List[SentenceCandidate], embeddings: np.ndarray
+    ) -> List[float]:
+        titles = [candidate.title or candidate.text for candidate in candidates]
+        title_embeddings = self._encode(titles)
+        scores = np.sum(embeddings * title_embeddings, axis=1)
+        scores = np.clip(scores, 0.0, 1.0)
+        return self._normalize(scores).tolist()
 
-        # Normalize scores
-        if scores.max() > 0:
-            scores = scores / scores.max()
+    def _coin_relevance_scores(self, texts: Sequence[str], coin: str) -> List[float]:
+        coin_lower = coin.lower().strip()
+        coin_variants = (
+            {coin_lower, coin_lower.replace(" ", ""), coin.upper()}
+            if coin_lower
+            else set()
+        )
+        scores = []
+        for text in texts:
+            lower = text.lower()
+            coin_hits = sum(
+                1 for term in coin_variants if term and term.lower() in lower
+            )
+            crypto_hits = sum(1 for term in self.crypto_terms if term in lower)
+            market_hits = len(
+                re.findall(
+                    r"\b(?:price|market|volume|trading|investor|exchange|token|fund|etf)\b",
+                    lower,
+                )
+            )
+            score = min(1.0, 0.55 * coin_hits + 0.10 * crypto_hits + 0.07 * market_hits)
+            scores.append(score)
+        return self._normalize(np.array(scores, dtype=np.float32)).tolist()
 
-        return {sent: float(score) for sent, score in zip(sentences, scores)}
-
-    def _calculate_position_scores(self, sentences: List[str]) -> Dict[str, float]:
-        """Calculate position-based scores with exponential decay."""
-        scores = {}
-        n = len(sentences)
-
-        for i, sent in enumerate(sentences):
-            # Exponential decay for position (lead bias)
-            position_score = np.exp(-i / (n * 0.3))
-            scores[sent] = float(position_score)
-
-        return scores
-
-    def _calculate_crypto_relevance_scores(
-        self, sentences: List[str]
-    ) -> Dict[str, float]:
-        """Calculate crypto-specific relevance scores."""
-        scores = {}
-
-        for sent in sentences:
-            sent_lower = sent.lower()
-
-            # Count crypto terms
-            term_count = sum(1 for term in self.crypto_terms if term in sent_lower)
-
-            # Bonus for numbers (prices, percentages, dates)
-            number_count = len(re.findall(r"\d+(?:\.\d+)?%?", sent))
-
-            # Bonus for named entities
-            doc = self.nlp(sent)
-            entity_count = sum(
+    def _entity_number_scores(self, texts: Sequence[str]) -> List[float]:
+        scores: List[float] = []
+        for doc in self.nlp.pipe(texts, batch_size=32):
+            entities = sum(
                 1
                 for ent in doc.ents
-                if ent.label_ in ["ORG", "PRODUCT", "MONEY", "PERCENT", "GPE"]
+                if ent.label_
+                in {
+                    "ORG",
+                    "PERSON",
+                    "GPE",
+                    "PRODUCT",
+                    "EVENT",
+                    "MONEY",
+                    "PERCENT",
+                    "DATE",
+                    "CARDINAL",
+                }
             )
-
-            # Combined score
-            score = (
-                min(term_count / 3.0, 1.0) * 0.5
-                + min(number_count / 2.0, 1.0) * 0.3
-                + min(entity_count / 2.0, 1.0) * 0.2
+            numbers = len(
+                re.findall(
+                    r"(?:\$\s*)?\d+(?:[,.]\d+)*(?:\.\d+)?\s*(?:%|billion|million|bn|m|k)?",
+                    doc.text,
+                    flags=re.I,
+                )
             )
+            quote_or_claim = (
+                1
+                if re.search(
+                    r"\b(?:said|reported|announced|according|filed|approved|launched)\b",
+                    doc.text,
+                    flags=re.I,
+                )
+                else 0
+            )
+            score = min(1.0, 0.15 * entities + 0.18 * numbers + 0.18 * quote_or_claim)
+            scores.append(score)
+        return self._normalize(np.array(scores, dtype=np.float32)).tolist()
 
-            scores[sent] = float(score)
-
+    @staticmethod
+    def _position_scores(candidates: List[SentenceCandidate]) -> List[float]:
+        scores = []
+        for candidate in candidates:
+            denominator = max(candidate.sentence_count - 1, 1)
+            relative_pos = candidate.sentence_index / denominator
+            # News articles usually put the most important info early, but we still keep later details.
+            scores.append(float(math.exp(-2.2 * relative_pos)))
         return scores
 
-    def _calculate_combined_scores(self, sentences: List[str]) -> Dict[str, float]:
-        """Combine multiple scoring methods for robust ranking."""
-        if not sentences:
-            raise ValueError("No sentences provided for scoring")
-
-        # Get scores from all methods (ALL REQUIRED)
-        textrank_scores = self._calculate_textrank_scores(sentences)
-        tfidf_scores = self._calculate_tfidf_scores(sentences)
-        position_scores = self._calculate_position_scores(sentences)
-        crypto_scores = self._calculate_crypto_relevance_scores(sentences)
-
-        # Combine with weights
-        combined_scores = {}
-
-        for sent in sentences:
-            score = (
-                textrank_scores[sent] * 0.35  # Semantic similarity
-                + tfidf_scores[sent] * 0.30  # Keyword importance
-                + position_scores[sent] * 0.20  # Position bias
-                + crypto_scores[sent] * 0.15  # Crypto relevance
+    def _article_weight_scores(
+        self, candidates: List[SentenceCandidate]
+    ) -> List[float]:
+        engagements = np.array(
+            [max(c.engagement, 0.0) for c in candidates], dtype=np.float32
+        )
+        if engagements.max() > 0:
+            engagement_scores = np.log1p(engagements) / np.log1p(
+                float(engagements.max())
             )
-            combined_scores[sent] = score
+        else:
+            engagement_scores = np.zeros(len(candidates), dtype=np.float32)
 
-        return combined_scores
+        recency_scores = []
+        now = datetime.now(timezone.utc)
+        for c in candidates:
+            if c.published_at:
+                age_hours = max((now - c.published_at).total_seconds() / 3600.0, 0.0)
+                recency = math.exp(-age_hours / 168.0)  # one-week half-ish decay
+            else:
+                recency = 0.45
+            recency_scores.append(recency)
 
-    def _extract_key_phrases_advanced(self, text: str, max_phrases: int = 7) -> List[str]:
-        """Extract key phrases using spaCy NER and noun chunks."""
-        doc = self.nlp(text[:50000])
-        phrases = []
-        phrase_scores = {}
+        quality = np.array([c.article_quality for c in candidates], dtype=np.float32)
+        combined = (
+            0.45 * quality
+            + 0.35 * np.array(recency_scores, dtype=np.float32)
+            + 0.20 * engagement_scores
+        )
+        return self._normalize(combined).tolist()
 
-        # Named Entity Recognition
+    def _novelty_scores(self, embeddings: np.ndarray) -> List[float]:
+        if len(embeddings) <= 1:
+            return [1.0] * len(embeddings)
+        sim = cosine_similarity(embeddings)
+        np.fill_diagonal(sim, 0.0)
+        redundancy = sim.max(axis=1)
+        novelty = 1.0 - np.clip(redundancy, 0.0, 1.0)
+        return self._normalize(novelty).tolist()
+
+    def _cluster_candidates(
+        self, embeddings: np.ndarray, max_clusters: int = 6
+    ) -> Dict[int, int]:
+        n = len(embeddings)
+        if n == 0:
+            return {}
+        if n == 1:
+            return {0: 0}
+
+        cluster_count = min(max(2, int(math.sqrt(n))), max_clusters, n)
+        try:
+            from sklearn.cluster import AgglomerativeClustering
+
+            try:
+                model = AgglomerativeClustering(
+                    n_clusters=cluster_count, metric="cosine", linkage="average"
+                )
+            except TypeError:
+                model = AgglomerativeClustering(
+                    n_clusters=cluster_count, affinity="cosine", linkage="average"
+                )
+            labels = model.fit_predict(embeddings)
+            return {i: int(label) for i, label in enumerate(labels)}
+        except Exception:
+            return {i: 0 for i in range(n)}
+
+    # ---------------------------------------------------------------------
+    # Summary selection and rendering
+    # ---------------------------------------------------------------------
+
+    def _select_summary_sentences(
+        self,
+        sorted_candidates: List[SentenceCandidate],
+        embeddings_in_original_order: np.ndarray,
+        max_sentences: int = 4,
+    ) -> List[SentenceCandidate]:
+        if not sorted_candidates:
+            return []
+
+        # Rebuild embeddings for the sorted order because candidates were sorted after scoring.
+        sorted_texts = [candidate.text for candidate in sorted_candidates]
+        sorted_embeddings = self._encode(sorted_texts)
+
+        selected: List[int] = []
+        source_counts: Dict[str, int] = defaultdict(int)
+        article_counts: Dict[int, int] = defaultdict(int)
+        lambda_relevance = 0.72
+
+        # Always seed with the strongest sentence.
+        selected.append(0)
+        source_counts[sorted_candidates[0].source] += 1
+        article_counts[sorted_candidates[0].article_index] += 1
+
+        while len(selected) < min(max_sentences, len(sorted_candidates)):
+            best_idx = None
+            best_mmr = -1e9
+
+            for idx, candidate in enumerate(sorted_candidates):
+                if idx in selected:
+                    continue
+                if source_counts[candidate.source] >= 2:
+                    continue
+                if (
+                    article_counts[candidate.article_index] >= 1
+                    and len(sorted_candidates) > max_sentences
+                ):
+                    continue
+
+                similarity_to_selected = max(
+                    float(np.dot(sorted_embeddings[idx], sorted_embeddings[sel_idx]))
+                    for sel_idx in selected
+                )
+                if similarity_to_selected > 0.84:
+                    continue
+
+                mmr_score = (
+                    lambda_relevance * candidate.score
+                    - (1.0 - lambda_relevance) * similarity_to_selected
+                )
+                if mmr_score > best_mmr:
+                    best_mmr = mmr_score
+                    best_idx = idx
+
+            if best_idx is None:
+                # Relax constraints if too few sentences were selected.
+                remaining = [
+                    i for i in range(len(sorted_candidates)) if i not in selected
+                ]
+                if not remaining:
+                    break
+                best_idx = max(remaining, key=lambda i: sorted_candidates[i].score)
+
+            selected.append(best_idx)
+            source_counts[sorted_candidates[best_idx].source] += 1
+            article_counts[sorted_candidates[best_idx].article_index] += 1
+
+        selected_candidates = [sorted_candidates[i] for i in selected]
+        # Put the strongest sentence first, then maintain rough news-flow by article and position.
+        lead = selected_candidates[0]
+        rest = sorted(
+            selected_candidates[1:], key=lambda c: (c.article_index, c.sentence_index)
+        )
+        return [lead] + rest
+
+    def _render_summary(
+        self, selected: List[SentenceCandidate], max_chars: int = 650
+    ) -> str:
+        parts = [self._clean_sentence(candidate.text) for candidate in selected]
+        parts = [p for p in parts if p]
+        summary = " ".join(parts)
+        summary = re.sub(r"\s+", " ", summary).strip()
+
+        if len(summary) <= max_chars:
+            return summary
+
+        # Prefer dropping the lowest-priority trailing sentences before truncating words.
+        while len(summary) > max_chars and len(parts) > 1:
+            parts.pop()
+            summary = " ".join(parts).strip()
+
+        if len(summary) > max_chars:
+            summary = summary[: max_chars - 3].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+        return summary
+
+    # ---------------------------------------------------------------------
+    # Insights, topics, sentiment, risk, price impact
+    # ---------------------------------------------------------------------
+
+    def _extract_key_phrases(
+        self, text: str, coin: str, max_phrases: int = 8
+    ) -> List[str]:
+        if not text:
+            return []
+
+        doc = self.nlp(text[:80_000])
+        scores: Counter[str] = Counter()
+
         for ent in doc.ents:
-            if ent.label_ in [
+            if ent.label_ in {
                 "ORG",
+                "PERSON",
+                "GPE",
                 "PRODUCT",
                 "EVENT",
                 "MONEY",
                 "PERCENT",
-                "GPE",
-                "PERSON",
-            ]:
-                if len(ent.text) > 2:
-                    phrases.append(ent.text.lower())
-                    phrase_scores[ent.text.lower()] = (
-                        phrase_scores.get(ent.text.lower(), 0) + 2.0
-                    )
+                "DATE",
+            }:
+                phrase = self._normalize_phrase(ent.text)
+                if self._valid_phrase(phrase):
+                    scores[phrase] += 3
 
-        # Noun Chunks
         for chunk in doc.noun_chunks:
-            chunk_text = chunk.text.lower().strip()
-            if (
-                len(chunk_text.split()) >= 2
-                and len(chunk_text) > 5
-                and not chunk_text.startswith(("the ", "a ", "an ", "this ", "that "))
-            ):
-                phrases.append(chunk_text)
-                phrase_scores[chunk_text] = phrase_scores.get(chunk_text, 0) + 1.0
+            phrase = self._normalize_phrase(chunk.text)
+            if self._valid_phrase(phrase):
+                scores[phrase] += 1
 
-        # Crypto-specific patterns
-        crypto_patterns = [
-            r"\b\w+\s+(?:protocol|network|blockchain|token|coin|exchange)\b",
-            r"\b(?:defi|nft|dao|dex|dapp)\s+\w+\b",
-            r"\b\w+\s+(?:upgrade|launch|partnership|integration)\b",
-            r"\b(?:bitcoin|ethereum|crypto)\s+\w+\b",
-        ]
+        for match in re.findall(
+            r"\b(?:bitcoin|ethereum|crypto|blockchain|defi|nft|dao|dex|etf|stablecoin)\s+[a-z0-9-]+\b|"
+            r"\b[a-z0-9-]+\s+(?:protocol|network|token|coin|exchange|wallet|etf|fund|upgrade|launch|listing|approval)\b",
+            text.lower(),
+        ):
+            phrase = self._normalize_phrase(match)
+            if self._valid_phrase(phrase):
+                scores[phrase] += 2
 
-        for pattern in crypto_patterns:
-            matches = re.findall(pattern, text.lower())
-            for match in matches:
-                if len(match) > 5:
-                    phrases.append(match)
-                    phrase_scores[match] = phrase_scores.get(match, 0) + 1.5
-
-        # Count and score
-        phrase_counts = Counter(phrases)
-
-        # Combine frequency with scores
-        final_scores = {}
-        for phrase, count in phrase_counts.items():
-            base_score = phrase_scores.get(phrase, 1.0)
-            final_scores[phrase] = count * base_score
-
-        # Filter and rank
-        stop_phrases = {
-            "the bitcoin", "the crypto", "the market", "the price", "a lot",
-            "this week", "last week", "next week", "right now", "at this",
-            "bitcoin is", "bitcoin to", "crypto is", "crypto to", "price is", "price to"
-        }
-
-        # Remove stop phrases and deduplicate using embeddings
-        filtered_phrases = []
-        for phrase, score in final_scores.items():
-            if phrase not in stop_phrases and len(phrase.split()) <= 4:
-                filtered_phrases.append((phrase, score))
-
-        # Sort by score
-        filtered_phrases.sort(key=lambda x: x[1], reverse=True)
-
-        # Deduplicate using semantic similarity
-        unique_phrases = []
-        if filtered_phrases:
-            # Get top candidates
-            top_candidates = filtered_phrases[:20]
-            candidate_texts = [p[0] for p in top_candidates]
-
-            try:
-                candidate_embeddings = self.sentence_model.encode(candidate_texts, show_progress_bar=False)
-
-                for i, (phrase, score) in enumerate(top_candidates):
-                    if len(unique_phrases) >= max_phrases:
-                        break
-
-                    # Check similarity to already selected
-                    is_duplicate = False
-                    if unique_phrases:
-                        phrase_emb = candidate_embeddings[i]
-                        for selected_phrase in unique_phrases:
-                            selected_idx = candidate_texts.index(selected_phrase)
-                            sim = cosine_similarity([phrase_emb], [candidate_embeddings[selected_idx]])[0][0]
-                            if sim > 0.85:  # Very similar, skip
-                                is_duplicate = True
-                                break
-
-                    if not is_duplicate:
-                        unique_phrases.append(phrase)
-            except:
-                # Fallback: just take top phrases without deduplication
-                unique_phrases = [p[0] for p in top_candidates[:max_phrases]]
-
-        # Capitalize properly for display
-        formatted_phrases = []
-        for phrase in unique_phrases[:max_phrases]:
-            # Capitalize each word except common lowercase words
-            words = phrase.split()
-            formatted = []
-            for word in words:
-                if word.lower() in ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with']:
-                    formatted.append(word.lower())
-                else:
-                    formatted.append(word.capitalize())
-            formatted_phrases.append(' '.join(formatted))
-
-        return formatted_phrases
-
-    def _detect_risks_advanced(
-        self, text: str, articles: List[Dict[str, Any]]
-    ) -> List[str]:
-        """Advanced risk detection with context awareness."""
-        text_lower = text.lower()
-        detected_risks = []
-        risk_contexts = {}
-
-        # Analyze each risk level
-        for level, config in self.risk_patterns.items():
-            for keyword in config["keywords"]:
-                if keyword in text_lower:
-                    count = text_lower.count(keyword)
-                    context_found = any(
-                        ctx in text_lower for ctx in config.get("context", [])
-                    )
-
-                    # Calculate severity
-                    severity_score = count * config["weight"]
-                    if context_found:
-                        severity_score *= 1.3
-
-                    # Create more specific risk descriptions
-                    if level == "critical":
-                        risk_text = f"Critical: {keyword.title()} threat detected - immediate attention required"
-                    elif level == "high":
-                        if keyword in ["sec", "regulation", "ban", "lawsuit"]:
-                            risk_text = f"Regulatory: {keyword.upper()} action may impact market access"
-                        else:
-                            risk_text = f"High Risk: {keyword.title()} concerns identified"
-                    else:
-                        if keyword in ["volatility", "crash", "dump"]:
-                            risk_text = f"Market: High {keyword} expected - exercise caution"
-                        else:
-                            risk_text = f"Alert: {keyword.title()} activity detected"
-
-                    risk_contexts[risk_text] = severity_score
-
-        # Sort by severity
-        sorted_risks = sorted(risk_contexts.items(), key=lambda x: x[1], reverse=True)
-        unique_risks = [risk for risk, _ in sorted_risks[:5]]
-
-        # Add sentiment-based risks with more context
-        if articles:
-            bearish_count = sum(
-                1 for a in articles if a.get("sentiment", {}).get("label") == "Bearish"
+        # TF-IDF phrase boost.
+        try:
+            vectorizer = TfidfVectorizer(
+                stop_words="english",
+                ngram_range=(2, 3),
+                max_features=80,
+                min_df=1,
+                sublinear_tf=True,
             )
-            bearish_ratio = bearish_count / len(articles)
+            matrix = vectorizer.fit_transform([text])
+            feature_scores = np.asarray(matrix.sum(axis=0)).ravel()
+            features = vectorizer.get_feature_names_out()
+            for feature, score in zip(features, feature_scores):
+                phrase = self._normalize_phrase(feature)
+                if self._valid_phrase(phrase):
+                    scores[phrase] += float(score) * 2
+        except ValueError:
+            pass
 
-            if bearish_ratio > 0.6:
-                unique_risks.append(
-                    f"Sentiment: {bearish_ratio*100:.0f}% bearish coverage - negative market outlook"
-                )
-            elif bearish_ratio > 0.4:
-                unique_risks.append(
-                    f"Sentiment: Mixed signals with {bearish_ratio*100:.0f}% bearish articles"
-                )
+        coin_lower = coin.lower().strip()
+        if coin_lower:
+            for phrase in list(scores.keys()):
+                if coin_lower in phrase.lower():
+                    scores[phrase] += 2
 
-        return (
-            unique_risks[:5]
-            if unique_risks
-            else ["No significant risks detected - market conditions appear stable"]
-        )
+        ranked = [phrase for phrase, _ in scores.most_common(30)]
+        deduped = self._semantic_dedup_phrases(ranked, max_phrases=max_phrases)
+        return [self._display_phrase(phrase) for phrase in deduped]
 
-    def _assess_price_impact_advanced(
-        self, text: str, sentiment_data: Dict[str, Any], articles: List[Dict[str, Any]]
-    ) -> str:
-        """Advanced price impact assessment."""
-        text_lower = text.lower()
-        impact_score = 0.0
+    def _build_topics(
+        self,
+        candidates: List[SentenceCandidate],
+        clusters: Dict[int, int],
+        scored_candidates: List[SentenceCandidate],
+        max_topics: int = 5,
+    ) -> List[Dict[str, Any]]:
+        # Map text to score because scored_candidates is sorted.
+        score_by_text = {c.text: c.score for c in scored_candidates}
+        grouped: Dict[int, List[SentenceCandidate]] = defaultdict(list)
+        for original_idx, cluster_id in clusters.items():
+            if 0 <= original_idx < len(candidates):
+                grouped[cluster_id].append(candidates[original_idx])
 
-        # High-impact keywords with context
-        for keyword in self.price_impact_signals["high"]["keywords"]:
-            if keyword in text_lower:
-                pattern = rf"\b{keyword}\b.{{0,50}}\b(?:price|market|trading|volume)\b"
-                if re.search(pattern, text_lower):
-                    impact_score += 2.5
-                else:
-                    impact_score += 1.5
+        topics = []
+        for cluster_id, group in grouped.items():
+            group_sorted = sorted(
+                group, key=lambda c: score_by_text.get(c.text, 0), reverse=True
+            )
+            combined = " ".join(c.text for c in group_sorted[:5])
+            phrases = self._extract_key_phrases(combined, coin="", max_phrases=2)
+            label = phrases[0] if phrases else self._shorten(group_sorted[0].text, 56)
+            topics.append(
+                {
+                    "topic": label,
+                    "sentence_count": len(group),
+                    "top_sentence": group_sorted[0].text,
+                    "sources": sorted({c.source for c in group_sorted[:5] if c.source}),
+                }
+            )
 
-        # Major events
-        for event in self.price_impact_signals["high"]["events"]:
-            count = text_lower.count(event)
-            impact_score += count * 2.0
+        topics.sort(key=lambda t: t["sentence_count"], reverse=True)
+        return topics[:max_topics]
 
-        # Sentiment strength
-        confidence = sentiment_data.get("confidence", 0)
-        bullish_pct = sentiment_data.get("bullish_pct", 0)
-        bearish_pct = sentiment_data.get("bearish_pct", 0)
+    def _aggregate_sentiment(self, docs: List[ArticleDoc]) -> Dict[str, Any]:
+        totals = {"Bullish": 0.0, "Bearish": 0.0, "Neutral": 0.0}
+        weight_total = 0.0
 
-        if confidence > 75:
-            if bullish_pct > 70 or bearish_pct > 70:
-                impact_score += 2.5
-            elif bullish_pct > 60 or bearish_pct > 60:
-                impact_score += 1.5
+        for rank, doc in enumerate(docs):
+            recency_weight = math.exp(-rank / max(len(docs) * 0.45, 1.0))
+            confidence = max(min(doc.sentiment_confidence, 1.0), 0.05)
+            weight = confidence * recency_weight * (0.65 + 0.35 * doc.quality)
+            label = doc.sentiment_label if doc.sentiment_label in totals else "Neutral"
+            totals[label] += weight
+            weight_total += weight
 
-        # Volume of coverage
-        article_count = len(articles)
-        if article_count > 20:
-            impact_score += 1.5
-        elif article_count > 10:
-            impact_score += 1.0
-
-        # Positive indicators
-        for level, config in self.positive_indicators.items():
-            for keyword in config["keywords"]:
-                if keyword in text_lower:
-                    impact_score += config["weight"]
-
-        # Determine impact
-        if impact_score >= 8.0:
-            return "High"
-        elif impact_score >= 4.0:
-            return "Medium"
-        elif impact_score >= 1.5:
-            return "Low"
+        if weight_total <= 0:
+            bullish = bearish = neutral = 33.3
         else:
-            return "None"
+            bullish = 100.0 * totals["Bullish"] / weight_total
+            bearish = 100.0 * totals["Bearish"] / weight_total
+            neutral = 100.0 * totals["Neutral"] / weight_total
 
-    def _aggregate_sentiment_advanced(
-        self, articles: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """Advanced sentiment aggregation with confidence weighting and recency bias."""
-        if not articles:
-            raise ValueError("No articles provided for sentiment aggregation")
-
-        sentiment_scores = {"Bullish": 0.0, "Bearish": 0.0, "Neutral": 0.0}
-        total_weight = 0.0
-
-        for i, article in enumerate(articles):
-            sentiment = article.get("sentiment", {})
-            label = sentiment.get("label", "Neutral")
-            confidence = sentiment.get("confidence", 0.5)
-
-            # Recency weight
-            recency_weight = np.exp(-i / (len(articles) * 0.4))
-
-            # Combined weight
-            weight = confidence * recency_weight
-
-            sentiment_scores[label] += weight
-            total_weight += weight
-
-        # Calculate percentages
-        if total_weight > 0:
-            bullish_pct = (sentiment_scores["Bullish"] / total_weight) * 100
-            bearish_pct = (sentiment_scores["Bearish"] / total_weight) * 100
-            neutral_pct = (sentiment_scores["Neutral"] / total_weight) * 100
+        label = "Neutral"
+        confidence = max(bullish, bearish, neutral)
+        if bullish >= bearish + 18 and bullish >= neutral - 8:
+            label = "Bullish" if bullish >= 58 else "Mixed-Bullish"
+            confidence = bullish
+        elif bearish >= bullish + 18 and bearish >= neutral - 8:
+            label = "Bearish" if bearish >= 58 else "Mixed-Bearish"
+            confidence = bearish
+        elif max(bullish, bearish) >= neutral + 8:
+            label = "Mixed-Bullish" if bullish > bearish else "Mixed-Bearish"
+            confidence = max(bullish, bearish)
         else:
-            bullish_pct = bearish_pct = neutral_pct = 33.33
-
-        # Determine overall sentiment with improved logic
-        max_pct = max(bullish_pct, bearish_pct, neutral_pct)
-
-        # If bullish or bearish is close to neutral (within 15%), favor the directional sentiment
-        if abs(bullish_pct - neutral_pct) < 15 and bullish_pct > bearish_pct:
-            # Bullish is close to neutral, favor bullish if significant
-            if bullish_pct > 35:
-                overall_label = "Mixed-Bullish"
-                confidence = int((bullish_pct * 0.6 + neutral_pct * 0.4))
-            else:
-                overall_label = "Neutral"
-                confidence = int(neutral_pct)
-        elif abs(bearish_pct - neutral_pct) < 15 and bearish_pct > bullish_pct:
-            # Bearish is close to neutral, favor bearish if significant
-            if bearish_pct > 35:
-                overall_label = "Mixed-Bearish"
-                confidence = int((bearish_pct * 0.6 + neutral_pct * 0.4))
-            else:
-                overall_label = "Neutral"
-                confidence = int(neutral_pct)
-        elif bullish_pct == max_pct:
-            if bullish_pct > bearish_pct + 25:
-                overall_label = "Bullish"
-                confidence = int(bullish_pct)
-            elif bullish_pct > bearish_pct + 12:
-                overall_label = "Mixed-Bullish"
-                confidence = int((bullish_pct * 0.7 + neutral_pct * 0.3))
-            else:
-                overall_label = "Neutral"
-                confidence = int(neutral_pct)
-        elif bearish_pct == max_pct:
-            if bearish_pct > bullish_pct + 25:
-                overall_label = "Bearish"
-                confidence = int(bearish_pct)
-            elif bearish_pct > bullish_pct + 12:
-                overall_label = "Mixed-Bearish"
-                confidence = int((bearish_pct * 0.7 + neutral_pct * 0.3))
-            else:
-                overall_label = "Neutral"
-                confidence = int(neutral_pct)
-        else:
-            overall_label = "Neutral"
-            confidence = int(neutral_pct)
+            label = "Neutral"
+            confidence = neutral
 
         return {
-            "label": overall_label,
-            "confidence": min(confidence, 100),
-            "bullish_pct": round(bullish_pct, 1),
-            "bearish_pct": round(bearish_pct, 1),
-            "neutral_pct": round(neutral_pct, 1),
+            "label": label,
+            "confidence": int(round(min(max(confidence, 0.0), 100.0))),
+            "bullish_pct": round(bullish, 1),
+            "bearish_pct": round(bearish, 1),
+            "neutral_pct": round(neutral, 1),
         }
 
-    def _cluster_similar_sentences(self, sentences: List[str], embeddings: np.ndarray) -> Dict[int, List[int]]:
-        """Cluster sentences by topic using semantic similarity."""
-        from sklearn.cluster import AgglomerativeClustering
+    def _detect_risks(
+        self, text: str, docs: List[ArticleDoc]
+    ) -> Tuple[List[str], List[Dict[str, Any]]]:
+        lower = text.lower()
+        details: Dict[str, Dict[str, Any]] = {}
 
-        # Determine optimal number of clusters (3-5 topics)
-        n_clusters = min(max(3, len(sentences) // 10), 5)
+        for level, config in self.risk_patterns.items():
+            for keyword in config["keywords"]:
+                pattern = self._keyword_pattern(keyword)
+                matches = list(re.finditer(pattern, lower))
+                if not matches:
+                    continue
 
-        try:
-            clustering = AgglomerativeClustering(n_clusters=n_clusters, metric='cosine', linkage='average')
-            labels = clustering.fit_predict(embeddings)
+                context_hits = 0
+                examples: List[str] = []
+                for match in matches[:5]:
+                    start = max(match.start() - 120, 0)
+                    end = min(match.end() + 120, len(lower))
+                    window = lower[start:end]
+                    if any(ctx in window for ctx in config.get("context", [])):
+                        context_hits += 1
+                    if len(examples) < 2:
+                        examples.append(self._shorten(text[start:end].strip(), 180))
 
-            # Group sentences by cluster
-            clusters = {}
-            for idx, label in enumerate(labels):
-                if label not in clusters:
-                    clusters[label] = []
-                clusters[label].append(idx)
-
-            return clusters
-        except:
-            # Fallback: single cluster
-            return {0: list(range(len(sentences)))}
-
-    def _select_diverse_sentences(self, sentences: List[str], scores: Dict[str, float],
-                                  embeddings: np.ndarray, max_sentences: int = 4) -> List[str]:
-        """Select diverse, high-quality sentences covering different topics."""
-        if len(sentences) <= max_sentences:
-            return sentences
-
-        # Cluster sentences by topic
-        clusters = self._cluster_similar_sentences(sentences, embeddings)
-
-        # Select best sentence from each cluster
-        selected = []
-        sentence_list = list(sentences)
-
-        # Sort clusters by size (larger = more important)
-        sorted_clusters = sorted(clusters.items(), key=lambda x: len(x[1]), reverse=True)
-
-        for cluster_id, sentence_indices in sorted_clusters:
-            if len(selected) >= max_sentences:
-                break
-
-            # Get sentences in this cluster
-            cluster_sentences = [sentence_list[i] for i in sentence_indices]
-
-            # Find highest scoring sentence
-            best_sent = max(cluster_sentences, key=lambda s: scores.get(s, 0))
-            selected.append(best_sent)
-
-        # Fill remaining slots with highest scoring sentences
-        while len(selected) < max_sentences:
-            remaining = [s for s in sentence_list if s not in selected]
-            if not remaining:
-                break
-            best = max(remaining, key=lambda s: scores.get(s, 0))
-            selected.append(best)
-
-        return selected
-
-    def _is_garbage_sentence(self, sentence: str, target_coin: str = "") -> bool:
-        """Filter out garbage sentences (boilerplate, Latin text, generic advice, non-relevant content)."""
-        sent_lower = sentence.lower()
-
-        # Filter out Latin placeholder text
-        latin_phrases = ['lorem ipsum', 'morbi pretium', 'aliquam mollis', 'consectetur adipiscing']
-        if any(phrase in sent_lower for phrase in latin_phrases):
-            return True
-
-        # Filter out editorial boilerplate
-        boilerplate = [
-            'strict editorial policy', 'focuses on accuracy', 'relevance, and impartiality',
-            'subscribe to our newsletter', 'follow us on', 'click here to',
-            'terms and conditions', 'privacy policy', 'disclosure', 'sponsored'
-        ]
-        if any(phrase in sent_lower for phrase in boilerplate):
-            return True
-
-        # Filter out generic trading advice (not news)
-        generic_advice = [
-            'if you just turn on', 'make sure you', 'always remember to',
-            'dont forget to', 'be sure to', 'you should always',
-            'my advice is', 'i recommend', 'in my opinion'
-        ]
-        if any(phrase in sent_lower for phrase in generic_advice):
-            return True
-
-        # Filter out questions and calls to action
-        if sent_lower.endswith('?') or 'what do you think' in sent_lower or 'let me know' in sent_lower:
-            return True
-
-        # Crypto-related terms that should be present
-        crypto_terms = [
-            'bitcoin', 'btc', 'crypto', 'cryptocurrency', 'blockchain', 'mining',
-            'wallet', 'exchange', 'price', 'market', 'trading', 'coin', 'token',
-            'ethereum', 'eth', 'defi', 'nft', 'satoshi', 'hash', 'block'
-        ]
-
-        # Check if sentence contains at least one crypto term
-        has_crypto_term = any(term in sent_lower for term in crypto_terms)
-        if not has_crypto_term:
-            return True
-
-        # If target coin specified, prefer sentences mentioning it
-        # (This is used for relevance scoring, not filtering)
-
-        return False
-
-    def _generate_summary_advanced(
-        self, articles: List[Dict[str, Any]], max_sentences: int = 3
-    ) -> str:
-        """Generate high-quality, coherent summary using information fusion."""
-        if not articles:
-            raise ValueError("No articles provided for summarization")
-
-        # Strategy: Extract key facts, then build a coherent narrative
-        # Step 1: Identify the main story/theme
-        # Step 2: Extract supporting facts
-        # Step 3: Fuse into a flowing paragraph
-
-        # Collect candidate sentences
-        candidates = []
-        for article in articles[:60]:
-            content = (
-                article.get("full_content")
-                or article.get("summary")
-                or article.get("text", "")
-            )
-            if not content:
-                continue
-
-            cleaned = self._clean_text(content)
-            sentences = self._extract_sentences(cleaned)
-
-            # Take first 2 sentences (lead paragraph)
-            for sent in sentences[:2]:
-                if 40 < len(sent) < 180 and not self._is_garbage_sentence(sent):
-                    candidates.append({
-                        'text': sent,
-                        'engagement': article.get('engagement_count', 0),
-                        'timestamp': article.get('timestamp', '')
-                    })
-
-        if len(candidates) < 5:
-            raise ValueError("Insufficient quality sentences for summarization")
-
-        sentences = [c['text'] for c in candidates]
-        embeddings = self.sentence_model.encode(sentences, show_progress_bar=False)
-
-        # Find main theme using centrality
-        similarity_matrix = cosine_similarity(embeddings)
-        centrality = similarity_matrix.mean(axis=1)
-
-        # Get top 10 most central sentences
-        top_indices = centrality.argsort()[-10:][::-1]
-        top_sentences = [sentences[i] for i in top_indices]
-        top_embeddings = embeddings[top_indices]
-
-        # Cluster these top sentences to find the dominant narrative
-        from sklearn.cluster import AgglomerativeClustering
-
-        n_clusters = min(3, len(top_sentences) // 3)
-        if n_clusters < 2:
-            n_clusters = 2
-
-        clustering = AgglomerativeClustering(n_clusters=n_clusters, metric='cosine', linkage='average')
-        labels = clustering.fit_predict(top_embeddings)
-
-        # Find largest cluster (main narrative)
-        cluster_sizes = {}
-        for label in labels:
-            cluster_sizes[label] = cluster_sizes.get(label, 0) + 1
-        main_cluster = max(cluster_sizes.items(), key=lambda x: x[1])[0]
-
-        # Get sentences from main cluster
-        main_sentences = [top_sentences[i] for i, label in enumerate(labels) if label == main_cluster]
-        main_embeddings = [top_embeddings[i] for i, label in enumerate(labels) if label == main_cluster]
-
-        # Build coherent summary by selecting complementary sentences
-        selected = []
-
-        # 1. Start with most central sentence in main cluster
-        main_centrality = cosine_similarity(main_embeddings).mean(axis=1)
-        start_idx = main_centrality.argmax()
-        selected.append(main_sentences[start_idx])
-        selected_emb = [main_embeddings[start_idx]]
-
-        # 2. Add sentences that provide new information (moderate similarity)
-        for i, (sent, emb) in enumerate(zip(main_sentences, main_embeddings)):
-            if len(selected) >= max_sentences:
-                break
-            if i == start_idx:
-                continue
-
-            # Check similarity to already selected
-            sims = [cosine_similarity([emb], [sel_emb])[0][0] for sel_emb in selected_emb]
-            max_sim = max(sims)
-
-            # Want related but not redundant (0.3-0.65 similarity)
-            if 0.3 < max_sim < 0.65:
-                selected.append(sent)
-                selected_emb.append(emb)
-
-        # If we need more sentences, look outside main cluster
-        if len(selected) < max_sentences:
-            other_sentences = [top_sentences[i] for i, label in enumerate(labels) if label != main_cluster]
-            other_embeddings = [top_embeddings[i] for i, label in enumerate(labels) if label != main_cluster]
-
-            for sent, emb in zip(other_sentences, other_embeddings):
-                if len(selected) >= max_sentences:
-                    break
-
-                # Check similarity to selected
-                sims = [cosine_similarity([emb], [sel_emb])[0][0] for sel_emb in selected_emb]
-                max_sim = max(sims) if sims else 0
-
-                # Want moderate connection to main narrative
-                if 0.25 < max_sim < 0.7:
-                    selected.append(sent)
-                    selected_emb.append(emb)
-
-        # Order by original position for natural flow
-        position_map = {sent: sentences.index(sent) for sent in selected}
-        ordered = sorted(selected, key=lambda s: position_map[s])
-
-        # Create flowing summary with better transitions
-        summary_parts = []
-        for i, sent in enumerate(ordered):
-            # Clean up sentence
-            sent = sent.strip()
-
-            # Remove source attributions at the end (news outlets)
-            # Match common patterns: "Source Name", "Source.com", "Source Finance", etc.
-            sent = re.sub(r'\s+(?:Investing\.com|Benzinga|Bloomberg|Reuters|CoinDesk|Cointelegraph|Yahoo Finance.*?|Barron\'s|Fortune|CNBC|MarketWatch|The Block|Decrypt|Bitcoin Magazine|CryptoSlate|NewsBTC|U\.Today|Stocktwits|Coinpedia|CoinGape|BeInCrypto|Cryptonews|FXStreet|AMBCrypto)$', '', sent, flags=re.IGNORECASE)
-
-            # Remove trailing source patterns like "Source Name UK", "Source Finance UK"
-            sent = re.sub(r'\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\s*(?:UK|US|USA)?$', '', sent)
-
-            summary_parts.append(sent)
-
-        summary = " ".join(summary_parts)
-        summary = re.sub(r'\s+', ' ', summary).strip()
-
-        # Length optimization (350-500 chars optimal)
-        if len(summary) > 500:
-            while len(summary) > 500 and len(summary_parts) > 1:
-                summary_parts.pop()
-                summary = " ".join(summary_parts)
-                summary = re.sub(r'\s+', ' ', summary).strip()
-
-            if len(summary) > 500:
-                # Truncate at word boundary
-                summary = summary[:497].rsplit(' ', 1)[0] + "..."
-
-        return summary
-
-    def summarize_articles(
-        self, articles: List[Dict[str, Any]], coin: str
-    ) -> Dict[str, Any]:
-        """
-        Generate comprehensive summary using ALL advanced NLP techniques.
-        NO FALLBACKS - all methods are REQUIRED.
-        """
-        if not articles:
-            raise ValueError(f"No articles provided for {coin}")
-
-        logger.info(
-            f"Generating production NLP summary for {coin} from {len(articles)} articles"
-        )
-
-        # All methods are REQUIRED
-        sentiment_data = self._aggregate_sentiment_advanced(articles)
-        summary = self._generate_summary_advanced(articles, max_sentences=4)
-
-        # Combine text
-        combined_text = " ".join(
-            [
-                self._clean_text(
-                    a.get("title", "")
-                    + " "
-                    + (a.get("full_content") or a.get("summary") or a.get("text", ""))
+                severity = (
+                    len(matches)
+                    * float(config["weight"])
+                    * (1.35 if context_hits else 1.0)
                 )
-                for a in articles[:35]
-            ]
+                name = self._risk_label(level, keyword)
+                details[name] = {
+                    "risk": name,
+                    "level": level,
+                    "keyword": keyword,
+                    "score": round(severity, 2),
+                    "mentions": len(matches),
+                    "context_mentions": context_hits,
+                    "examples": examples,
+                }
+
+        # Sentiment-distribution risk.
+        bearish_count = sum(1 for doc in docs if doc.sentiment_label == "Bearish")
+        bearish_ratio = bearish_count / max(len(docs), 1)
+        if bearish_ratio >= 0.55:
+            details["Sentiment: bearish coverage concentration"] = {
+                "risk": "Sentiment: bearish coverage concentration",
+                "level": "medium" if bearish_ratio < 0.7 else "high",
+                "keyword": "bearish sentiment",
+                "score": round(bearish_ratio * 4, 2),
+                "mentions": bearish_count,
+                "context_mentions": bearish_count,
+                "examples": [],
+            }
+
+        ranked = sorted(details.values(), key=lambda d: d["score"], reverse=True)
+        if not ranked:
+            return ["No major NLP-detected risks in the current article set"], []
+
+        factors = []
+        for item in ranked[:5]:
+            if item["level"] == "critical":
+                factors.append(
+                    f"Critical: {item['keyword'].title()} risk mentioned across coverage"
+                )
+            elif item["level"] == "high":
+                factors.append(
+                    f"High: {item['keyword'].title()} / regulatory risk detected"
+                )
+            else:
+                factors.append(
+                    f"Medium: {item['keyword'].title()} market risk detected"
+                )
+        return factors, ranked[:5]
+
+    def _assess_price_impact(
+        self,
+        text: str,
+        sentiment: Dict[str, Any],
+        docs: List[ArticleDoc],
+        risk_details: List[Dict[str, Any]],
+    ) -> Tuple[str, float]:
+        lower = text.lower()
+        score = 0.0
+
+        # Event-driven impact.
+        for event in self.positive_events:
+            score += min(lower.count(event), 5) * 0.55
+        for event in self.negative_events:
+            score += min(lower.count(event), 5) * 0.70
+
+        # Price/volume/numeric context.
+        market_numbers = re.findall(
+            r"\b(?:price|volume|market cap|open interest|liquidation|inflow|outflow|trading)\b.{0,80}?(?:\$\s*)?\d+(?:[,.]\d+)*(?:\.\d+)?\s*(?:%|billion|million|bn|m|k)?",
+            lower,
+        )
+        score += min(len(market_numbers), 8) * 0.45
+
+        # Sentiment conviction.
+        directional = max(
+            sentiment.get("bullish_pct", 0), sentiment.get("bearish_pct", 0)
+        )
+        if directional >= 70:
+            score += 2.0
+        elif directional >= 58:
+            score += 1.1
+
+        # Risk severity.
+        score += (
+            min(sum(float(item.get("score", 0.0)) for item in risk_details), 8.0) * 0.35
         )
 
-        # Extract insights and risks
-        key_insights = self._extract_key_phrases_advanced(combined_text, max_phrases=7)
-        risk_factors = self._detect_risks_advanced(combined_text, articles)
-        price_impact = self._assess_price_impact_advanced(
-            combined_text, sentiment_data, articles
+        # Coverage volume and source diversity.
+        sources = {doc.source for doc in docs if doc.source}
+        if len(docs) >= 40:
+            score += 1.3
+        elif len(docs) >= 18:
+            score += 0.75
+        if len(sources) >= 8:
+            score += 0.6
+
+        if score >= 8.0:
+            return "High", score
+        if score >= 4.2:
+            return "Medium", score
+        if score >= 1.7:
+            return "Low", score
+        return "None", score
+
+    def _build_reasoning(
+        self,
+        sentiment: Dict[str, Any],
+        price_impact: str,
+        impact_score: float,
+        article_count: int,
+        candidates: int,
+        selected: List[SentenceCandidate],
+    ) -> str:
+        lead_sources = sorted({s.source for s in selected if s.source})[:3]
+        sentiment_text = (
+            f"Sentiment is {sentiment['label']} with "
+            f"{sentiment['bullish_pct']:.0f}% bullish, "
+            f"{sentiment['bearish_pct']:.0f}% bearish, "
+            f"{sentiment['neutral_pct']:.0f}% neutral weighted coverage"
+        )
+        impact_text = f"Price impact is {price_impact} from an NLP event score of {impact_score:.1f}"
+        coverage_text = f"Analyzed {article_count} deduplicated articles and {candidates} candidate sentences"
+        source_text = (
+            f"Top summary evidence came from {', '.join(lead_sources)}"
+            if lead_sources
+            else "Top summary evidence came from the highest-ranked article sentences"
+        )
+        return f"{sentiment_text}. {impact_text}. {coverage_text}. {source_text}."
+
+    # ---------------------------------------------------------------------
+    # Text utilities
+    # ---------------------------------------------------------------------
+
+    def _clean_text(self, text: str) -> str:
+        if not text:
+            return ""
+        text = html.unescape(str(text))
+        text = unicodedata.normalize("NFKC", text)
+        text = re.sub(
+            r"<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>", " ", text, flags=re.I
+        )
+        text = re.sub(
+            r"<style\b[^<]*(?:(?!</style>)<[^<]*)*</style>", " ", text, flags=re.I
+        )
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"https?://(?:www\.)?([^\s/]+)[^\s]*", r"\1", text)
+        text = re.sub(r"\S+@\S+", " ", text)
+        text = text.translate(
+            str.maketrans(
+                {
+                    "“": '"',
+                    "”": '"',
+                    "„": '"',
+                    "‟": '"',
+                    "’": "'",
+                    "‘": "'",
+                    "‚": "'",
+                    "‛": "'",
+                    "—": "-",
+                    "–": "-",
+                    "…": "...",
+                }
+            )
+        )
+        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"([!?.,;:])\1{2,}", r"\1", text)
+        return text.strip()
+
+    def _clean_sentence(self, sentence: str) -> str:
+        sentence = self._clean_text(sentence)
+        sentence = re.sub(
+            r"\s+(?:Investing\.com|Benzinga|Bloomberg|Reuters|CoinDesk|Cointelegraph|Yahoo Finance|Barron's|Fortune|CNBC|MarketWatch|The Block|Decrypt|Bitcoin Magazine|CryptoSlate|NewsBTC|U\.Today|Stocktwits|Coinpedia|CoinGape|BeInCrypto|Cryptonews|FXStreet|AMBCrypto)\s*$",
+            "",
+            sentence,
+            flags=re.I,
+        )
+        sentence = re.sub(r"\s+-\s+(?:[A-Z][\w.&-]+\s*){1,4}$", "", sentence)
+        sentence = sentence.strip(" -|•\t\n")
+        if sentence and sentence[-1] not in ".!?":
+            sentence += "."
+        return sentence
+
+    def _article_quality(
+        self,
+        title: str,
+        body: str,
+        source: str,
+        published_at: Optional[datetime],
+        engagement: float,
+    ) -> float:
+        length_score = min(len(body) / 2_500.0, 1.0)
+        title_score = 1.0 if 20 <= len(title) <= 180 else 0.45
+        source_score = 0.65 if source and source != "unknown" else 0.35
+        engagement_score = min(math.log1p(max(engagement, 0.0)) / 8.0, 1.0)
+        if published_at:
+            age_days = max(
+                (datetime.now(timezone.utc) - published_at).total_seconds() / 86_400.0,
+                0.0,
+            )
+            recency_score = math.exp(-age_days / 14.0)
+        else:
+            recency_score = 0.45
+        return float(
+            0.25 * length_score
+            + 0.20 * title_score
+            + 0.20 * source_score
+            + 0.20 * recency_score
+            + 0.15 * engagement_score
         )
 
-        # Generate reasoning with more context
-        sentiment_label = sentiment_data['label']
-        bullish_pct = sentiment_data['bullish_pct']
-        bearish_pct = sentiment_data['bearish_pct']
-        neutral_pct = sentiment_data['neutral_pct']
+    def _article_sentiment(
+        self, article: Dict[str, Any], text: str
+    ) -> Tuple[str, float]:
+        sentiment = article.get("sentiment") or {}
+        if isinstance(sentiment, dict) and sentiment.get("label"):
+            label = self._normalize_sentiment_label(str(sentiment.get("label")))
+            confidence = self._normalize_confidence(sentiment.get("confidence", 0.65))
+            return label, confidence
 
-        # Build contextual reasoning
-        reasoning_parts = []
+        # Lexical NLP backup when upstream sentiment is missing.
+        lower = text.lower()
+        bullish_hits = sum(
+            1
+            for word in self.bullish_lexicon
+            if re.search(self._keyword_pattern(word), lower)
+        )
+        bearish_hits = sum(
+            1
+            for word in self.bearish_lexicon
+            if re.search(self._keyword_pattern(word), lower)
+        )
+        if bullish_hits > bearish_hits + 1:
+            confidence = min(0.55 + 0.06 * (bullish_hits - bearish_hits), 0.86)
+            return "Bullish", confidence
+        if bearish_hits > bullish_hits + 1:
+            confidence = min(0.55 + 0.06 * (bearish_hits - bullish_hits), 0.86)
+            return "Bearish", confidence
+        return "Neutral", 0.55
 
-        # Sentiment distribution
-        if bullish_pct > 60:
-            reasoning_parts.append(f"Strong bullish sentiment dominates with {bullish_pct:.0f}% positive coverage")
-        elif bearish_pct > 60:
-            reasoning_parts.append(f"Bearish sentiment prevails with {bearish_pct:.0f}% negative coverage")
-        elif neutral_pct > 60:
-            reasoning_parts.append(f"Market sentiment remains neutral with {neutral_pct:.0f}% balanced coverage")
-        else:
-            reasoning_parts.append(f"Mixed sentiment: {bullish_pct:.0f}% bullish, {bearish_pct:.0f}% bearish, {neutral_pct:.0f}% neutral")
+    @staticmethod
+    def _normalize_sentiment_label(label: str) -> str:
+        value = label.strip().lower()
+        if value in {
+            "bullish",
+            "positive",
+            "pos",
+            "up",
+            "mixed-bullish",
+            "mixed bullish",
+        }:
+            return (
+                "Bullish"
+                if value != "mixed-bullish" and value != "mixed bullish"
+                else "Bullish"
+            )
+        if value in {
+            "bearish",
+            "negative",
+            "neg",
+            "down",
+            "mixed-bearish",
+            "mixed bearish",
+        }:
+            return (
+                "Bearish"
+                if value != "mixed-bearish" and value != "mixed bearish"
+                else "Bearish"
+            )
+        return "Neutral"
 
-        # Price impact context
-        if price_impact == "High":
-            reasoning_parts.append("Major market-moving events detected with significant price implications")
-        elif price_impact == "Medium":
-            reasoning_parts.append("Moderate market activity with potential price movement")
-        elif price_impact == "Low":
-            reasoning_parts.append("Limited market catalysts, stable price action expected")
+    @staticmethod
+    def _normalize_confidence(value: Any) -> float:
+        try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            return 0.55
+        if confidence > 1.0:
+            confidence /= 100.0
+        return float(min(max(confidence, 0.05), 1.0))
 
-        # Article volume context
-        if len(articles) > 80:
-            reasoning_parts.append(f"High media attention ({len(articles)} articles)")
-        elif len(articles) > 40:
-            reasoning_parts.append(f"Moderate coverage ({len(articles)} articles)")
-        else:
-            reasoning_parts.append(f"Limited coverage ({len(articles)} articles)")
+    @staticmethod
+    def _parse_datetime(value: Any) -> Optional[datetime]:
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, (int, float)):
+            # Support seconds or milliseconds.
+            timestamp = (
+                float(value) / 1000.0 if float(value) > 10_000_000_000 else float(value)
+            )
+            try:
+                return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            except (OSError, ValueError):
+                return None
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            text = text.replace("Z", "+00:00")
+            try:
+                parsed = datetime.fromisoformat(text)
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                # Common simple format fallback.
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d %b %Y", "%b %d, %Y"):
+                    try:
+                        return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        continue
+        return None
 
-        reasoning = ". ".join(reasoning_parts) + "."
+    @staticmethod
+    def _safe_float(value: Any) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
 
-        result = {
-            "summary": summary,
-            "sentiment": sentiment_data["label"],
-            "confidence": sentiment_data["confidence"],
-            "key_insights": key_insights,
-            "price_impact": price_impact,
-            "reasoning": reasoning[:200],
-            "risk_factors": risk_factors,
-            "used_fallback": False,
-            "summary_source": "nlp_production",
-            "model_used": "textrank_sbert_tfidf_required",
-            "llm_error": None,
+    @staticmethod
+    def _normalize(values: np.ndarray) -> np.ndarray:
+        values = np.asarray(values, dtype=np.float32)
+        if len(values) == 0:
+            return values
+        min_value = float(values.min())
+        max_value = float(values.max())
+        if math.isclose(max_value, min_value):
+            return np.ones_like(values, dtype=np.float32)
+        return (values - min_value) / (max_value - min_value)
+
+    @staticmethod
+    def _uppercase_ratio(text: str) -> float:
+        letters = [c for c in text if c.isalpha()]
+        if not letters:
+            return 0.0
+        return sum(1 for c in letters if c.isupper()) / len(letters)
+
+    @staticmethod
+    def _normalize_for_key(text: str) -> str:
+        text = unicodedata.normalize("NFKC", text or "").lower()
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    @staticmethod
+    def _stable_hash(text: str) -> str:
+        return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()
+
+    @staticmethod
+    def _token_set(text: str) -> set[str]:
+        stop = {
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "to",
+            "of",
+            "in",
+            "on",
+            "for",
+            "with",
+            "by",
+            "from",
+            "as",
+            "is",
+            "are",
+        }
+        return {
+            tok
+            for tok in re.findall(r"[a-z0-9]+", text.lower())
+            if tok not in stop and len(tok) > 2
         }
 
-        logger.info(
-            f"✓ Production summary for {coin}: {result['sentiment']} ({result['confidence']}%), "
-            f"{len(key_insights)} insights, {len(risk_factors)} risks, impact: {price_impact}"
-        )
+    @staticmethod
+    def _jaccard(a: set[str], b: set[str]) -> float:
+        if not a or not b:
+            return 0.0
+        return len(a & b) / len(a | b)
 
-        return result
+    @staticmethod
+    def _keyword_pattern(keyword: str) -> str:
+        escaped = re.escape(keyword.lower())
+        escaped = escaped.replace(r"\ ", r"\s+")
+        return rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
 
-    async def summarize_articles_async(
-        self, articles: List[Dict[str, Any]], coin: str
-    ) -> Dict[str, Any]:
-        """Async wrapper."""
-        import asyncio
+    @staticmethod
+    def _risk_label(level: str, keyword: str) -> str:
+        if level == "critical":
+            return f"Critical: {keyword.title()} threat"
+        if level == "high" and keyword.lower() in {
+            "sec",
+            "cftc",
+            "doj",
+            "regulation",
+            "ban",
+            "lawsuit",
+        }:
+            return f"Regulatory: {keyword.upper()} action"
+        if level == "high":
+            return f"High: {keyword.title()} risk"
+        return f"Medium: {keyword.title()} risk"
 
-        return await asyncio.to_thread(self.summarize_articles, articles, coin)
+    @staticmethod
+    def _normalize_phrase(phrase: str) -> str:
+        phrase = re.sub(r"[^a-zA-Z0-9$%\s.-]", " ", phrase or "")
+        phrase = re.sub(r"\s+", " ", phrase).strip().lower()
+        phrase = re.sub(r"^(?:the|a|an|this|that|these|those)\s+", "", phrase)
+        return phrase
+
+    @staticmethod
+    def _valid_phrase(phrase: str) -> bool:
+        if not phrase:
+            return False
+        words = phrase.split()
+        if not (1 <= len(words) <= 5):
+            return False
+        if len(phrase) < 3 or len(phrase) > 64:
+            return False
+        bad = {
+            "market",
+            "price",
+            "crypto",
+            "bitcoin",
+            "ethereum",
+            "article",
+            "week",
+            "today",
+            "yesterday",
+            "right now",
+            "read more",
+            "source",
+        }
+        return phrase not in bad
+
+    def _semantic_dedup_phrases(
+        self, phrases: List[str], max_phrases: int
+    ) -> List[str]:
+        if not phrases:
+            return []
+        phrases = list(dict.fromkeys(phrases))
+        if len(phrases) == 1:
+            return phrases
+        embeddings = self._encode(phrases)
+        selected: List[int] = []
+        for idx, _phrase in enumerate(phrases):
+            if len(selected) >= max_phrases:
+                break
+            if not selected:
+                selected.append(idx)
+                continue
+            sim = max(float(np.dot(embeddings[idx], embeddings[j])) for j in selected)
+            if sim < 0.83:
+                selected.append(idx)
+        return [phrases[i] for i in selected[:max_phrases]]
+
+    @staticmethod
+    def _display_phrase(phrase: str) -> str:
+        lowercase = {
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+        }
+        out = []
+        for idx, word in enumerate(phrase.split()):
+            if idx > 0 and word in lowercase:
+                out.append(word)
+            elif word.upper() in {
+                "BTC",
+                "ETH",
+                "ETF",
+                "SEC",
+                "CFTC",
+                "NFT",
+                "DAO",
+                "DEX",
+            }:
+                out.append(word.upper())
+            else:
+                out.append(word[:1].upper() + word[1:])
+        return " ".join(out)
+
+    @staticmethod
+    def _shorten(text: str, length: int) -> str:
+        text = re.sub(r"\s+", " ", text or "").strip()
+        if len(text) <= length:
+            return text
+        return text[: max(0, length - 3)].rsplit(" ", 1)[0] + "..."
 
 
-# Global instance
-_summarizer_instance = None
+_summarizer_instance: Optional[EnhancedNLPSummarizer] = None
 
 
-def get_summarizer() -> ProductionNLPSummarizer:
-    """Get or create the global production NLP summarizer instance."""
+def get_summarizer() -> EnhancedNLPSummarizer:
+    """FastAPI-friendly singleton. Load heavy NLP models only once per worker process."""
     global _summarizer_instance
-
     if _summarizer_instance is None:
-        _summarizer_instance = ProductionNLPSummarizer()
-
+        _summarizer_instance = EnhancedNLPSummarizer()
     return _summarizer_instance
