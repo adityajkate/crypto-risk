@@ -1,8 +1,4 @@
 """
-Enhanced Production NLP Summarizer for FastAPI
-
-Drop-in replacement for a crypto/news article summarizer.
-
 Core NLP stack:
 - spaCy: sentence segmentation, NER, noun chunks, token filtering
 - Sentence-Transformers: semantic embeddings, semantic deduplication, title relevance
@@ -102,9 +98,9 @@ class SentenceCandidate:
     score_parts: Dict[str, float] = field(default_factory=dict)
 
 
-class EnhancedNLPSummarizer:
+class ProductionNLPSummarizer:
     """
-    Higher-quality NLP summarizer designed for FastAPI responses.
+    Higher-quality NLP summarizer designed for FastAPI responses with the original response shape.
 
     Improvements over the earlier version:
     - fixes quote normalization and text cleaning
@@ -123,7 +119,7 @@ class EnhancedNLPSummarizer:
         max_articles: int = 80,
         max_sentences_per_article: int = 8,
     ) -> None:
-        logger.info("Initializing Enhanced NLP Summarizer...")
+        logger.info("Initializing Production NLP Summarizer...")
 
         try:
             # Parser + NER are useful; keep the full model enabled.
@@ -377,7 +373,7 @@ class EnhancedNLPSummarizer:
             "crash",
         }
 
-        logger.info("Enhanced NLP Summarizer initialized")
+        logger.info("Production NLP Summarizer initialized")
 
     # ---------------------------------------------------------------------
     # Public API
@@ -423,9 +419,6 @@ class EnhancedNLPSummarizer:
         price_impact, impact_score = self._assess_price_impact(
             combined_text, sentiment, article_docs, risk_details
         )
-        topics = self._build_topics(
-            candidates, clusters, scored_candidates, max_topics=5
-        )
         reasoning = self._build_reasoning(
             sentiment=sentiment,
             price_impact=price_impact,
@@ -435,35 +428,19 @@ class EnhancedNLPSummarizer:
             selected=selected,
         )
 
+        # Keep the original frontend/API contract only. No extra response fields.
         return {
             "summary": summary,
             "sentiment": sentiment["label"],
             "confidence": sentiment["confidence"],
-            "sentiment_breakdown": {
-                "bullish_pct": sentiment["bullish_pct"],
-                "bearish_pct": sentiment["bearish_pct"],
-                "neutral_pct": sentiment["neutral_pct"],
-            },
             "key_insights": key_insights,
-            "topics": topics,
             "price_impact": price_impact,
-            "price_impact_score": round(float(impact_score), 2),
-            "reasoning": reasoning,
+            "reasoning": reasoning[:240],
             "risk_factors": risk_factors,
-            "risk_details": risk_details,
             "used_fallback": False,
-            "summary_source": "enhanced_nlp_extractive_semantic",
+            "summary_source": "nlp_production",
             "model_used": "spacy_sbert_tfidf_textrank_mmr_ner",
             "llm_error": None,
-            "metadata": {
-                "input_articles": len(articles),
-                "articles_used_after_dedup": len(article_docs),
-                "candidate_sentences": len(candidates),
-                "summary_sentences": len(selected),
-                "sources_used": sorted(
-                    {doc.source for doc in article_docs if doc.source}
-                ),
-            },
         }
 
     async def summarize_articles_async(
@@ -1086,15 +1063,34 @@ class EnhancedNLPSummarizer:
     def _render_summary(
         self, selected: List[SentenceCandidate], max_chars: int = 650
     ) -> str:
-        parts = [self._clean_sentence(candidate.text) for candidate in selected]
-        parts = [p for p in parts if p]
+        """
+        Render a coherent frontend-ready paragraph.
+
+        The previous version simply joined selected sentences. That can create output like:
+        "Sentence A. However, sentence B. Meanwhile, sentence C."
+        when the selected sentences came from different articles. This renderer fixes that by:
+        - removing dangling transition words
+        - deduplicating overlapping selected facts
+        - ordering sentences by a stable news flow
+        - trimming without cutting mid-word
+        """
+        parts = []
+        for candidate in selected:
+            sentence = self._clean_sentence(candidate.text)
+            sentence = self._remove_dangling_connector(sentence)
+            if sentence:
+                parts.append(sentence)
+
+        parts = self._deduplicate_summary_parts(parts)
+        parts = sorted(parts, key=self._summary_theme_order)
+
         summary = " ".join(parts)
         summary = re.sub(r"\s+", " ", summary).strip()
 
         if len(summary) <= max_chars:
             return summary
 
-        # Prefer dropping the lowest-priority trailing sentences before truncating words.
+        # Prefer dropping the least central trailing sentence before truncating text.
         while len(summary) > max_chars and len(parts) > 1:
             parts.pop()
             summary = " ".join(parts).strip()
@@ -1102,6 +1098,128 @@ class EnhancedNLPSummarizer:
         if len(summary) > max_chars:
             summary = summary[: max_chars - 3].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
         return summary
+
+    def _remove_dangling_connector(self, sentence: str) -> str:
+        """Remove connectors that only make sense inside the original article context."""
+        if not sentence:
+            return ""
+
+        sentence = re.sub(
+            r"^(?:however|but|yet|still|meanwhile|additionally|furthermore|moreover|also|instead|nevertheless|therefore|as a result|on the other hand)\s*,?\s+",
+            "",
+            sentence.strip(),
+            flags=re.I,
+        )
+        sentence = re.sub(r"^and\s+", "", sentence, flags=re.I).strip()
+
+        if sentence:
+            sentence = sentence[0].upper() + sentence[1:]
+            if sentence[-1] not in ".!?":
+                sentence += "."
+        return sentence
+
+    def _deduplicate_summary_parts(self, parts: List[str]) -> List[str]:
+        """Remove near-duplicate summary sentences after MMR selection."""
+        if len(parts) <= 1:
+            return parts
+
+        embeddings = self._encode(parts)
+        kept: List[int] = []
+        for idx, part in enumerate(parts):
+            if not kept:
+                kept.append(idx)
+                continue
+            max_sim = max(float(np.dot(embeddings[idx], embeddings[j])) for j in kept)
+            # High threshold because different finance sentences often share terms.
+            if max_sim < 0.82:
+                kept.append(idx)
+        return [parts[i] for i in kept]
+
+    def _summary_theme_order(self, sentence: str) -> Tuple[int, int]:
+        """
+        Stable summary order for market news:
+        1. current price / macro setup
+        2. on-chain / investor behavior
+        3. regulatory / risk items
+        4. analyst forecasts / long-term projections
+        5. everything else
+        """
+        lower = sentence.lower()
+
+        current_market = {
+            "held near",
+            "traded",
+            "trading",
+            "price",
+            "rebound",
+            "support",
+            "resistance",
+            "oil",
+            "conflict",
+            "macro",
+            "inflation",
+            "rates",
+            "dollar",
+            "stocks",
+            "market",
+            "volume",
+        }
+        onchain = {
+            "shark",
+            "whale",
+            "wallet",
+            "wallets",
+            "supply",
+            "absorbed",
+            "accumulated",
+            "acquired",
+            "on-chain",
+            "holder",
+            "holders",
+            "miner",
+            "exchange reserve",
+            "inflow",
+            "outflow",
+        }
+        risk = {
+            "hack",
+            "exploit",
+            "lawsuit",
+            "sec",
+            "cftc",
+            "ban",
+            "regulation",
+            "investigation",
+            "liquidation",
+            "sell-off",
+            "risk",
+            "warning",
+        }
+        forecast = {
+            "trader",
+            "analyst",
+            "forecast",
+            "target",
+            "peak",
+            "path",
+            "projection",
+            "predict",
+            "prediction",
+            "peter brandt",
+            "late 2029",
+            "2029",
+            "2030",
+        }
+
+        if any(term in lower for term in current_market):
+            return (0, 0)
+        if any(term in lower for term in onchain):
+            return (1, 0)
+        if any(term in lower for term in risk):
+            return (2, 0)
+        if any(term in lower for term in forecast):
+            return (3, 0)
+        return (4, 0)
 
     # ---------------------------------------------------------------------
     # Insights, topics, sentiment, risk, price impact
@@ -1775,12 +1893,12 @@ class EnhancedNLPSummarizer:
         return text[: max(0, length - 3)].rsplit(" ", 1)[0] + "..."
 
 
-_summarizer_instance: Optional[EnhancedNLPSummarizer] = None
+_summarizer_instance: Optional[ProductionNLPSummarizer] = None
 
 
-def get_summarizer() -> EnhancedNLPSummarizer:
+def get_summarizer() -> ProductionNLPSummarizer:
     """FastAPI-friendly singleton. Load heavy NLP models only once per worker process."""
     global _summarizer_instance
     if _summarizer_instance is None:
-        _summarizer_instance = EnhancedNLPSummarizer()
+        _summarizer_instance = ProductionNLPSummarizer()
     return _summarizer_instance
