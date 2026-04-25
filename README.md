@@ -370,6 +370,7 @@ python train_regime_model.py     # Train regime detector
 ## License
 
 This project is licensed under the MIT License.
+Contributors :
 
 ---
 
