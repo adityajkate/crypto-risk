@@ -363,8 +363,7 @@ python train_regime_model.py     # Train regime detector
       <img src="https://img.shields.io/badge/Suman%20Manik-Developer-orange?style=for-the-badge" alt="Suman Manik" />
     </td>
     <td align="center">
-      <img src="https://img.shields.io/badge/Abdullah 
-  %20Khan-Developer-orange?style=for-the-badge" alt="Abdullah Khan" />
+      <img src="https://img.shields.io/badge/Abdullah%20Khan-Developer-red?style=for-the-badge" alt="Abdullah Khan" />
     </td>
   </tr>
 </table>
