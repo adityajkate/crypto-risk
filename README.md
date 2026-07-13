@@ -56,8 +56,6 @@
 - **CryptoBERT**: Transformer-based sentiment scoring
 - **NLP Summarization**: Extractive text analysis
 - **Fear & Greed Index**: Market emotion tracking
-- **Google Trends**: Search volume correlation
-
 </td>
 <td width="50%">
 
