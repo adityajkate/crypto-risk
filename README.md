@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=32&duration=3000&pause=1000&color=6366F1&center=true&vCenter=true&width=600&lines=Crypto+Risk+Lens;Real-Time+Risk+Assessment;ML-Powered+Analytics" alt="Crypto Risk Lens" />
+  <img src="https://readme-typing-svg.herokuapp.com?font=Times+New+Roman&pause=1000&color=72F722&center=true&vCenter=true&width=435&lines=Crypto+Risk)" alt="Crypto Risk Lens" />
 </h1>
 
 <p align="center">
