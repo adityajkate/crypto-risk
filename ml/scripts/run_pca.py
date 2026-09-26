@@ -56,7 +56,7 @@ class PCATrainer:
 
 def main():
     trainer = PCATrainer()
-    trainer.run()
+    trainer.run(self=None)
 
 if __name__ == "__main__":
     main()
