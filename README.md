@@ -1,4 +1,4 @@
-<h1 align="center">
+<h1 align="left">
   <img src="https://readme-typing-svg.herokuapp.com?font=Times+New+Roman&pause=60&color=72F722&center=true&vCenter=true&width=435&lines=Crypto+Risk" alt="Crypto Risk Lens" />
 </h1>
 
